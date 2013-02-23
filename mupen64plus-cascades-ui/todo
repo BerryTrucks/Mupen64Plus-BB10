@@ -1,0 +1,6 @@
+-Hook up settings UI to core
+-Add gamepad/keyboard support
+-Add cheats
+-Add input UI settings to change controller map and add players
+-Check HDMI play
+-Add foreign window to go back and forth from menu to emulator (currently issues with destroying child window and rotating back correctly)

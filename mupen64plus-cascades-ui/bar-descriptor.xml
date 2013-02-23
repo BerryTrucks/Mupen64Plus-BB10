@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<qnx xmlns="http://www.qnx.com/schemas/application/1.0">
+
+<!-- BlackBerry 10 application descriptor file.
+
+    Specifies parameters for identifying, installing, and launching native applications on BlackBerry 10.
+
+-->
+
+    <!-- A universally unique application identifier. Must be unique across all BlackBerry 10 applications.
+         Using a reverse DNS-style name as the id is recommended. (Eg. com.example.ExampleApplication.) Required. -->
+    <id>com.emulator.mupen64plusbb</id>
+
+    <!-- The name that is displayed in the BlackBerry 10 application installer.
+         May have multiple values for each language. See samples or xsd schema file. Optional. -->
+    <name>Mupen64+ BB</name>
+
+    <!-- A string value of the format <0-999>.<0-999>.<0-999> that represents application version which can be used to check for application upgrade.
+         Values can also be 1-part or 2-part. It is not necessary to have a 3-part value.
+         An updated version of application must have a versionNumber value higher than the previous version. Required. -->
+    <versionNumber>1.0.0</versionNumber>
+
+    <!-- Fourth digit segment of the package version. First three segments are taken from the
+         <versionNumber> element.  Must be an integer from 0 to 2^16-1 -->
+    <buildId>3</buildId>
+
+    <!-- Description, displayed in the BlackBerry 10 application installer.
+         May have multiple values for each language. See samples or xsd schema file. Optional. -->
+
+    <!--  Name of author which is used for signing. Must match the developer name of your development certificate. -->
+    <author>CatalystG</author>
+    <authorId>gYAAgPf7Z-AIj9l3eEeexi818Eg</authorId>
+    <description>N64 Emulator</description>
+
+    <initialWindow>
+        <aspectRatio>portrait</aspectRatio>
+        <autoOrients>false</autoOrients>
+        <systemChrome>none</systemChrome>
+        <transparent>false</transparent>
+    </initialWindow>
+
+    <!--  The category where the application appears. Either core.games or core.media. -->
+    <category>core.games</category>
+        <configuration name="Device-Debug">
+       <platformArchitecture>armle-v7</platformArchitecture>
+       <asset path="arm/o.le-v7-g/mupen64plus-cascades-ui" entry="true" type="Qnx/Elf">libmupen64plus-cascades-ui</asset>
+    </configuration>
+    <configuration name="Device-Release">
+       <entryPointType>Qnx/Cascades</entryPointType>
+       <platformArchitecture>armle-v7</platformArchitecture>
+       <asset path="arm/o.le-v7/libmupen64plus-cascades-ui.so" entry="true" type="Qnx/Elf">libmupen64plus-cascades-ui.so</asset>
+    </configuration>
+
+    <!--  The icon for the application, which should be 150x150. -->
+    <icon>
+        <image>Mupen64plusIcon.png</image>
+    </icon>
+    
+    <!--  The splash screen that will appear when your application is launching. -->
+
+    <!-- Application assets -->
+    <asset path="splashscreen.png">splashscreen.png</asset>
+    <asset path="icon.png">icon.png</asset>
+    <asset path="assets">assets</asset>
+    <asset path="data/InputAutoCfg.ini">InputAutoCfg.ini</asset>
+    <asset path="data/mupen64plus.cht">mupen64plus.cht</asset>
+    <asset path="data/mupen64plus.ini">mupen64plus.ini</asset>
+    <asset path="data/mupencheat.txt">mupencheat.txt</asset>
+    <asset path="data/RiceVideoLinux.ini">RiceVideoLinux.ini</asset>
+    <asset path="lib/gles2n64.so" type="Qnx/Elf">lib/gles2n64.so</asset>
+    <asset path="lib/libbbutil.so" type="Qnx/Elf">lib/libbbutil.so.1</asset>
+    <asset path="lib/libmupen64plus.so.2" type="Qnx/Elf">lib/libmupen64plus.so.2</asset>
+    <asset path="lib/libmupen64plus-rsp-hle.so" type="Qnx/Elf">lib/libmupen64plus-rsp-hle.so</asset>
+    <asset path="lib/libmupen64plus-video-rice.so" type="Qnx/Elf">lib/libmupen64plus-video-rice.so</asset>
+    <asset path="lib/libSDL12.so" type="Qnx/Elf">lib/libSDL12.so</asset>
+    <asset path="lib/libtco.so" type="Qnx/Elf">lib/libtco.so</asset>
+    <asset path="lib/mupen64plus-audio-sdl.so" type="Qnx/Elf">lib/mupen64plus-audio-sdl.so</asset>
+    <asset path="lib/rsp-no-sound.so" type="Qnx/Elf">lib/rsp-no-sound.so</asset>
+    <asset path="lib/libmupen64plus-input-bb.so" type="Qnx/Elf">lib/libmupen64plus-input-bb.so</asset>
+    <asset path="C:/Users/gmather/Desktop/Mupen64plusIcon.png">Mupen64plusIcon.png</asset>
+    <asset path="data/mupen64plus.cfg">mupen64plus.cfg</asset>
+
+    <!-- Bright theme is used for this application. --> 
+	<cascadesTheme>bright</cascadesTheme>
+
+    <!-- Request permission to execute native code.  Required for native applications. -->
+    <permission system="true">run_native</permission>
+    <permission>access_shared</permission>
+    <env var="LD_LIBRARY_PATH" value="app/native/lib:/usr/lib/qt4/lib"/>
+
+</qnx>
+
