@@ -1,5 +1,6 @@
 #include "input.h"
 #include "touch.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <sys/keycodes.h>
 

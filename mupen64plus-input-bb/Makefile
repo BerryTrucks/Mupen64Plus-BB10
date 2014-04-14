@@ -117,7 +117,7 @@ else
   endif
 endif
 
-#CXX := C:/bbndk/host_10_0_9_52/win32/x86/usr/bin/qcc -V4.6.3,gcc_ntoarmv7le_cpp
+CXX := J:/bbndk10.2-Gold/host_10_1_0_238/win32/x86/usr/bin/qcc -V4.6.3,gcc_ntoarmv7le_cpp
 #CXX := C:/bbndk-2.1.0-beta1/host/win32/x86/usr/bin/qcc -V4.4.2,gcc_ntoarmv7le_cpp
 #CXX set by IDE
 RM       ?= rm -f

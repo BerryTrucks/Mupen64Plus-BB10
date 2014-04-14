@@ -91,6 +91,7 @@ void LoadOverlay(char* name)
 		overlayQuad->text = strdup(name);
 		overlayQuad->scale = 1.25f;
 	}
+	
 
 	sprintf(tmp,"%s/DefaultStick.png",OVERLAY_DIR);
 	stickQuad = create_image(tmp, 0, 0, 0);
