@@ -81,6 +81,9 @@ UIQuad* osd_load = NULL;
 float save = 0.0f, load = 0.0f;
 int overlay_request = 1;
 
+double DISPLAY_WIDTH = 1280.0;
+double DISPLAY_HEIGHT = 768.0;
+
 static void
 bbutil_egl_perror(const char *msg) {
     static const char *errmsg[] = {
@@ -127,6 +130,32 @@ get_window_group_id()
     }
 
     return s_window_group_id;
+}
+
+static int menuOpen = 0;
+
+int bbutil_offset_menu(int offset)
+{
+	int pos[2] = { 0, offset };
+	screen_set_window_property_iv(screen_win, SCREEN_PROPERTY_POSITION, pos);
+	if (offset > 0)
+		menuOpen = 1;
+	else
+		menuOpen = 0;
+	return 0;
+}
+
+int bbutil_close_menu()
+{
+	int pos[2] = { 0, 0 };
+	screen_set_window_property_iv(screen_win, SCREEN_PROPERTY_POSITION, pos);
+	menuOpen = 0;
+	return 0;
+}
+
+int bbutil_is_menu_open()
+{
+	return menuOpen;
 }
 
 int
@@ -217,10 +246,26 @@ bbutil_init_egl(screen_context_t ctx, char *groupId, char *windowId) {
         return EXIT_FAILURE;
     }
 
-    if (screen_set_window_property_cv(screen_win, SCREEN_PROPERTY_ID_STRING, strlen(windowId),
+    /*int ndisplays;
+    screen_get_context_property_iv(screen_cxt, SCREEN_PROPERTY_DISPLAY_COUNT, &ndisplays);
+    fprintf(stderr, "Display Count: %d\n", ndisplays);
+    if (ndisplays > 1) {
+    	screen_display_t *screen_dpy = calloc(ndisplays, sizeof(screen_display_t));
+    	screen_get_context_property_pv(screen_cxt, SCREEN_PROPERTY_DISPLAYS, (void**)screen_dpy);
+    	screen_set_window_property_pv(screen_win, SCREEN_PROPERTY_DISPLAY, (void**)&screen_dpy[1]);
+    	int i = 0;
+        int sresolution[2];
+    	for (i = 0; i < ndisplays; i++) {
+    		screen_get_display_property_iv(screen_dpy[i], SCREEN_PROPERTY_SIZE, sresolution);
+    		fprintf(stderr, "Display %d: (%d, %d)\n", i, sresolution[0], sresolution[1]);
+    	}
+    	free(screen_dpy);
+    }*/
+
+    /*if (screen_set_window_property_cv(screen_win, SCREEN_PROPERTY_ID_STRING, strlen(windowId),
 		windowId) != 0) {
 		return false;
-	}
+	}*/
 
     if (screen_join_window_group(screen_win, groupId) != 0){
     	perror("screen_join_window_group");
@@ -252,6 +297,15 @@ bbutil_init_egl(screen_context_t ctx, char *groupId, char *windowId) {
     int screen_resolution[2];
 
     rc = screen_get_display_property_iv(screen_disp, SCREEN_PROPERTY_SIZE, screen_resolution);
+    if (screen_resolution[0] > screen_resolution[1]) {
+    	DISPLAY_WIDTH = screen_resolution[0];
+    	DISPLAY_HEIGHT = screen_resolution[1];
+    }
+    else {
+    	DISPLAY_WIDTH = screen_resolution[1];
+    	DISPLAY_HEIGHT = screen_resolution[0];
+    }
+    printf("WIDTH: %d\nHEIGHT: %d\n", (int)DISPLAY_WIDTH, (int)DISPLAY_HEIGHT);
     if (rc) {
         perror("screen_get_display_property_iv");
         bbutil_terminate();
@@ -271,13 +325,14 @@ bbutil_init_egl(screen_context_t ctx, char *groupId, char *windowId) {
 
     int size[2];
     rc = screen_get_window_property_iv(screen_win, SCREEN_PROPERTY_BUFFER_SIZE, size);
+    printf("WIDTH2: %d\nHEIGHT2: %d\n", size[0], size[1]);
     if (rc) {
         perror("screen_get_window_property_iv");
         bbutil_terminate();
         return EXIT_FAILURE;
     }
 
-    int buffer_size[2] = {size[0], size[1]};
+    int buffer_size[2] = {DISPLAY_WIDTH, DISPLAY_HEIGHT};
 
 /*
     if ((angle == 0) || (angle == 180)) {
@@ -1034,22 +1089,22 @@ int bbutil_calculate_dpi(screen_context_t ctx) {
 
 float UIPixelToViewportX(float x)
 {
-	return ((x/1280.0f)*2.0f)-1.0f;
+	return ((x/DISPLAY_WIDTH)*2.0f)-1.0f;
 }
 
 float UIPixelToViewportY(float y)
 {
-	return -(((y/768.0f)*2.0f)-1.0f);
+	return -(((y/DISPLAY_HEIGHT)*2.0f)-1.0f);
 }
 
 float UIPixelToViewportW(float w)
 {
-	return (w/1280.0f)*2.0f;
+	return (w/DISPLAY_WIDTH)*2.0f;
 }
 
 float UIPixelToViewportH(float h)
 {
-	return (h/768.0f)*2.0f;
+	return (h/DISPLAY_HEIGHT)*2.0f;
 }
 
 void offset_text(UIQuad * text, float x, float y){

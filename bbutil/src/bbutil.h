@@ -62,6 +62,9 @@ extern char romName[256];
 extern int initialized_n64;
 extern int overlay_request;
 
+extern double DISPLAY_WIDTH;
+extern double DISPLAY_HEIGHT;
+
 typedef struct
 {
 	char* text;
@@ -168,6 +171,10 @@ int bbutil_load_texture(const char* filename, int* width, int* height, float* te
  */
 
 int bbutil_calculate_dpi(screen_context_t ctx);
+
+int bbutil_offset_menu(int offset);
+int bbutil_close_menu();
+int bbutil_is_menu_open();
 
 /**
  * Rotates the screen to a given angle
