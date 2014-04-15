@@ -40,4 +40,8 @@ Container {
     
     Divider {}
     
+    function reset() {
+        _frontend.setInputValue(player, button, -1)
+        _mapping.text = "-1"
+    }
 }

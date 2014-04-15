@@ -47,7 +47,7 @@ osal_lib_search *osal_library_search(const char *searchpath)
     osal_lib_search *head = NULL, *curr = NULL;
     DIR *dir;
     struct dirent *entry;
-    
+
 #ifdef __APPLE__
     const char* suffix = ".dylib";
 #else
@@ -65,7 +65,7 @@ osal_lib_search *osal_library_search(const char *searchpath)
         if (strcmp(entry->d_name + strlen(entry->d_name) - strlen(suffix), suffix) != 0)
             continue;
         /* this is a .so file, so add it to the list */
-        newlib = malloc(sizeof(osal_lib_search));
+        newlib = (osal_lib_search*)malloc(sizeof(osal_lib_search));
         if (newlib == NULL)
         {
             fprintf(stderr, "Memory allocation error in osal_library_search()!\n");
@@ -92,7 +92,7 @@ osal_lib_search *osal_library_search(const char *searchpath)
         strncat(curr->filepath, entry->d_name, PATH_MAX - pathlen - 1);
         curr->filepath[PATH_MAX-1] = 0;
         /* set plugin_type and next pointer */
-        curr->plugin_type = 0;
+        curr->plugin_type = M64PLUGIN_NULL;
         curr->next = NULL;
     }
 

@@ -7,6 +7,7 @@ Page {
         id: titleBar2
         title: "Video Plugin Settings"
         visibility:  ChromeVisibility.Visible
+        scrollBehavior: TitleBarScrollBehavior.Sticky
     }
     
     actions: [
@@ -53,7 +54,7 @@ Page {
 	    Container {
 	        preferredWidth: 768
 	        horizontalAlignment: HorizontalAlignment.Center
-	        background: Color.create("#E8E8E8");
+	        background: _frontend.colorIndex == 0 ? Color.create("#E8E8E8") : Color.Black;
 	        bottomPadding: 10
 	        topPadding: 10
 	        

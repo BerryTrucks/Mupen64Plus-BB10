@@ -5,6 +5,7 @@ Page{
         id: titleBar
         title: "Cheat Codes"
         visibility:  ChromeVisibility.Visible
+        scrollBehavior: TitleBarScrollBehavior.Sticky
     }
     //ScrollView{
         

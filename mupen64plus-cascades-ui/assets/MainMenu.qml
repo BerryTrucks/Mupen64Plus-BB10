@@ -5,46 +5,159 @@ Page {
     id: menu
     property int videoPlugin
     property bool sound
-    
-    actionBarVisibility: {
-        if(emulatorVisable){
-            ChromeVisibility.Hidden
-        } else {
-            ChromeVisibility.Visible
-        }
-    }
-    actions: [
-        ActionItem {
-            title: "Play"
-            ActionBar.placement: ActionBarPlacement.OnBar
-            imageSource: "asset:///images/ic_open.png"
-            onTriggered: {
-                _frontend.video = videoPlugin;
-                _frontend.audio = sound;
-                if(_frontend.rom == ""){
-                    //Do something to focus on select rom box
-                } else {
-                    OrientationSupport.supportedDisplayOrientation = 
-                            SupportedDisplayOrientation.DisplayLandscape;
-                    emulatorVisable = true;
-                }
-            }
-        }
-    ]
-    
     property alias romDirectory: picker.directories
     property bool boxartEnabled
     property bool romLoading: false
     property bool useNetImage: false
+    property bool startNow: false
+    property bool running: false
+    property variant emuSheet
+
+    Menu.definition: MenuDefinition {
+        id: appMenu
+        actions: [
+            ActionItem {
+                title: "Save State"
+                imageSource: "asset:///images/save_load.png"
+                onTriggered: {
+                    _frontend.SaveState();
+                }
+            },
+            ActionItem {
+                title: "Load State"
+                imageSource: "asset:///images/save_load.png"
+                onTriggered: {
+                    _frontend.LoadState();
+                }
+            },
+            ActionItem {
+                title: "Toggle Overlay"
+                imageSource: "asset:///images/overlay.png"
+                onTriggered: {
+                    _frontend.LoadTouchOverlay();
+                }
+            },
+            ActionItem {
+                title: "Menu (Broken)"
+                imageSource: "asset:///images/home.png"
+                //enabled: false //TODO: Issues with restarting emu, SDL audio plugin crashes, can fix by not PluginUnload audio, but emu still crashes randomly, and on 3rd open.
+                onTriggered: {
+                    _frontend.ExitEmulator();
+                    OrientationSupport.supportedDisplayOrientation = 
+                    SupportedDisplayOrientation.DisplayPortrait;
+                    running = false
+                } 
+            },
+            ActionItem {
+                title: "Close"
+                imageSource: "asset:///images/ic_cancel.png"
+            }
+        ]
+    }
+    
+    function startEmulator() {
+        _frontend.video = videoPlugin;
+        _frontend.audio = sound;
+        if(_frontend.rom == ""){
+            //Do something to focus on select rom box
+        } else {
+            emuSheet = playSheet.createObject()
+            emuSheet.open()
+            Application.swipeDown.connect(onSwipeDown)
+            running = true
+            if (_frontend.Keyboard) {
+                _frontend.startEmulator(true);
+            }
+            else {
+                OrientationSupport.supportedDisplayOrientation = 
+                SupportedDisplayOrientation.DisplayLandscape;
+            }
+        }
+    }
+    
+    function emulatorClosing() {
+        running = false
+        emuSheet.destroyLater()
+    }
+    
+    function onSwipeDown() {
+        _frontend.swipedown()
+    }
+
+    actions: [
+        ActionItem {
+            id: _play
+            title: "Play"
+            ActionBar.placement: ActionBarPlacement.OnBar
+            imageSource: "asset:///images/ic_open.png"
+            onTriggered: {
+                startEmulator()
+            }
+        }
+    ]
+    
+    function hdmiDetected(attached) {
+        if (attached) {
+            menu.addAction(_playon, ActionBarPlacement.OnBar)
+        }
+        else {
+            menu.removeAction(_playon)
+        }
+    }
+    
+    function hasHistory() {
+        if (_frontend.hasHistory) {
+            menu.addAction(_history, ActionBarPlacement.OnBar)
+        }
+        else {
+            menu.removeAction(_history)
+        }
+    }
+    
+    function invoked(path) {
+        if (!running) {
+            loadROM(path)
+        }
+    }
+    
+    onCreationCompleted: {
+        _frontend.hdmiDetected.connect(hdmiDetected)
+        _frontend.hasHistoryChanged.connect(hasHistory)
+        _frontend.invoked.connect(invoked)
+        hasHistory()
+    }
     
     titleBar: TitleBar {
         id: titleBar
-        title: "Mupen64Plus-BB"
-        visibility:  {
-            if(emulatorVisable) {
-                ChromeVisibility.Hidden
-            } else {
-                ChromeVisibility.Visible
+        kind: TitleBarKind.FreeForm
+        scrollBehavior: TitleBarScrollBehavior.Sticky
+        
+        kindProperties: FreeFormTitleBarKindProperties {
+            content: Container {
+                layout: DockLayout {}
+                
+                Container {
+                    verticalAlignment: VerticalAlignment.Center
+                    leftPadding: 15.0
+                    
+                    Label {
+                        text: qsTr("Mupen64Plus-BB")
+                        textStyle.fontSize: FontSize.Large
+                        textStyle.color: Color.White
+                    }
+                }
+                Container {
+                    verticalAlignment: VerticalAlignment.Center
+                    horizontalAlignment: HorizontalAlignment.Right
+                    
+                    rightPadding: 15.0
+                    ImageView {
+                        imageSource: "asset:///images/mupen64plus.png"
+                        scalingMethod: ScalingMethod.AspectFit
+                        maxWidth: 81.0
+                        maxHeight: 81.0
+                    }
+                }
             }
         }
     }
@@ -53,69 +166,23 @@ Page {
     Container {
         horizontalAlignment: HorizontalAlignment.Center
         
-        Container {
-            layout: AbsoluteLayout {}
-            
-            ForeignWindowControl {
-	            id: _myForeignWindow
-	            objectName: "myForeignWindow"
-	            keyInputForwardingEnabled: true
-	            windowId: "emulator_m64p"
-	
-	            visible: emulatorVisable
-	            layoutProperties: AbsoluteLayoutProperties {
-	                positionX: 0
-	                positionY: 0
-	            }
-	            preferredWidth: 1280
-	            preferredHeight: 768
-	            
-	            updatedProperties: WindowProperty.Size | WindowProperty.Position | WindowProperty.Visible
-	            
-	            onBoundToWindowChanged: {
-	                if(boundToWindow){
-	                    emulatorVisable = true;
-	                } else {
-	                    emulatorVisable = false;
-	                }
-	            }
-	        }
-        }
-        
 	    Container {
 	        topPadding: 10
-	        visible: !emulatorVisable
-	        //background: backgroundPaint.imagePaint
-	
-	        //attachedObjects: [
-	        //    ImagePaintDefinition {
-	        //        id: backgroundPaint
-	        //       imageSource: "asset:///images/Background.png"
-	        //   }
-	        //]
-	        Container {
-	            minHeight: 250
-	            horizontalAlignment: HorizontalAlignment.Center
-	            
-	            ImageView {
-				    id: myImageView
-				    imageSource: "asset:///images/mupen64plus.png"
-				}
-	        }  
-	
+
 	        // Top Container with a RadioButtonGroup and title
 	        Container {
 	            preferredWidth: 650
+	            topPadding: 50.0
 	            horizontalAlignment: HorizontalAlignment.Center
 	            Container {
 	                preferredWidth: 650
-	                bottomPadding: 50
+                    bottomPadding: _frontend.Keyboard ? 15.0 : 50
 	                horizontalAlignment: HorizontalAlignment.Center
-	                
+
 	                layout: StackLayout {
 	                    orientation: LayoutOrientation.LeftToRight
 	                }
-	                
+
 	                TextField {
 	                    id: romName
 	                    objectName: "romName"
@@ -124,12 +191,14 @@ Page {
 	                    hintText: "Select a ROM"
 	                    text: picker.selectedFile
 	                }
-	                
+
 	                Button {
 	                    text: "..."
 	                    horizontalAlignment: HorizontalAlignment.Right
 	                    preferredWidth: 1
 	                    onClicked: {
+	                        if (_frontend.hasStartDirectory)
+	                        	picker.directories = [ _frontend.startDirectory ]
 	                        picker.open();
 	                        romLoading = true;
 	                    }
@@ -138,13 +207,11 @@ Page {
 	            
 	        } // Top Container
 	        
-	        Divider {}
-	        
 	        //Boxart
 	        Container {
                 preferredHeight: 500
                 preferredWidth: 768
-                topPadding: 50
+                topPadding: _frontend.Keyboard ? 5.0 : 50
                 visible: boxartEnabled
 
                 layout: DockLayout {}
@@ -207,12 +274,13 @@ Page {
 	            property string selectedFile
 	
 	            title: "Rom Selector"
-	            filter: ["*.n64", "*.z64", "*.v64"]
+	            filter: ["*.n64", "*.z64", "*.v64", "*.zip"]
 	            type: FileType.Other
 	
 	            onFileSelected: {
 	                _frontend.rom = selectedFiles[0];
 	                selectedFile = _frontend.rom.substr(_frontend.rom.lastIndexOf('/')+1);
+	                _frontend.startDirectory = _frontend.rom.substr(0, _frontend.rom.length - selectedFile.length)
 	                
 	                if(boxartEnabled){
 	                    var tmp = picker.selectedFile.indexOf("(")
@@ -222,13 +290,16 @@ Page {
 		                    _tracker.imageSource = "file:///accounts/1000/shared/misc/n64/.boxart/" + picker.selectedFile.substr(0, tmp).trim() + ".jpg";
 		                }
 	                }
+	                else {
+	                    _tracker.imageSource = "asset:///images/mupen64plus.png"
+	                }
 	                _frontend.LoadRom();
-	                _frontend.createCheatsPage();  
+	                _frontend.createCheatsPage();
 	            }
 	        },
 	        OrientationHandler {
 	              onOrientationChanged: {
-	                  if(OrientationSupport.supportedDisplayOrientation == SupportedDisplayOrientation.DisplayLandscape){
+                      if(OrientationSupport.supportedDisplayOrientation == SupportedDisplayOrientation.DisplayLandscape) {
 	                      _frontend.startEmulator(true);
 	                  }
 	              }
@@ -260,8 +331,68 @@ Page {
 	                    //myImageView.imageSource = "asset:///images/ps1_icon.png";
 	                    //console.log("Image Failed: " + _tracker.imageSource);
 	                }
+	                if (startNow) {
+                        startNow = false
+                        startEmulator()
+	                }
 	            }
 	        }
-	    ]           
-	} 
+	    ]
+	}
+    
+    function loadROM(path) {
+        romLoading = true
+        _frontend.rom = path
+        picker.selectedFile = _frontend.rom.substr(_frontend.rom.lastIndexOf('/') + 1)
+        
+        if(boxartEnabled){
+            var tmp = picker.selectedFile.indexOf("(")
+            if(tmp == -1){
+                _tracker.imageSource = "file:///accounts/1000/shared/misc/n64/.boxart/" + picker.selectedFile.substr(0, picker.selectedFile.lastIndexOf(".")).trim() + ".jpg";
+            } else {
+                _tracker.imageSource = "file:///accounts/1000/shared/misc/n64/.boxart/" + picker.selectedFile.substr(0, tmp).trim() + ".jpg";
+            }
+        }
+        else {
+            _tracker.imageSource = "asset:///images/mupen64plus.png"
+        }
+        _frontend.LoadRom()
+        _frontend.createCheatsPage()
+    }
+    
+    function playROM(path) {
+        startNow = true
+        loadROM(path)
+    }
+    
+    attachedObjects: [
+        ActionItem {
+            id: _playon
+            title: "Play On"
+            ActionBar.placement: ActionBarPlacement.OnBar
+            imageSource: "asset:///images/ic_hdmi.png"
+            onTriggered: {
+            }
+        },
+        ActionItem {
+            id: _history
+            title: qsTr("History")
+            ActionBar.placement: ActionBarPlacement.OnBar
+            imageSource: "asset:///images/ic_history.png"
+            onTriggered: {
+                var sheet = historySheet.createObject(_frontend)
+                sheet.loadROM.connect(loadROM)
+                sheet.playROM.connect(playROM)
+                sheet.open()
+            }
+        },
+        ComponentDefinition {
+            id: historySheet
+            source: "history.qml"
+        },
+        ComponentDefinition {
+            id: playSheet
+            source: "play.qml"
+        }
+    ]
 } // Page

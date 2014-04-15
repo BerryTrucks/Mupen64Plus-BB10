@@ -15,10 +15,21 @@
 #ifndef FRONTEND_H
 #define FRONTEND_H
 
+#include <History/Game.hpp>
+
 #include <bb/cascades/Application>
 #include <bb/cascades/Container>
+#include <bb/cascades/DataModel>
+#include <bb/cascades/QListDataModel>
+#include <bb/system/InvokeRequest>
 #include "emulator.h"
 #include <QThread>
+#include <QSettings>
+#include <QPropertyAnimation>
+
+#include <bb/device/DisplayInfo>
+
+#include <bps/deviceinfo.h>
 
 #include "imageloader.hpp"
 #include "NetRequest.hpp"
@@ -38,14 +49,35 @@ class Frontend: public QThread
 {
     Q_OBJECT
     Q_PROPERTY(QString rom READ getRom WRITE setRom NOTIFY romChanged)
+    Q_PROPERTY(QString startDirectory READ getStartDirectory WRITE setStartDirectory NOTIFY dummySignal)
+    Q_PROPERTY(bool hasStartDirectory READ hasStartDirectory NOTIFY dummySignal)
     Q_PROPERTY(int video READ getVideo WRITE setVideo NOTIFY videoChanged)
     Q_PROPERTY(int audio READ getAudio WRITE setAudio NOTIFY audioChanged)
     Q_PROPERTY(ImageLoader* boxart READ getBoxArt NOTIFY boxArtChanged)
     Q_PROPERTY(bool boxartLoaded READ boxartLoaded NOTIFY boxartLoadedChanged)
+    Q_PROPERTY(bool Keyboard READ hasKeyboard NOTIFY dummySignal)
+    Q_PROPERTY(int colorIndex READ colorIndex NOTIFY dummySignal)
+    Q_PROPERTY(int width READ width NOTIFY dummySignal)
+    Q_PROPERTY(int hight READ height NOTIFY dummySignal)
+    Q_PROPERTY(int emuWidth READ emuWidth NOTIFY dummySignal)
+    Q_PROPERTY(int emuHeight READ emuHeight NOTIFY dummySignal)
+	Q_PROPERTY(bb::cascades::DataModel* devices READ devices NOTIFY dummySignal)
+	Q_PROPERTY(bb::cascades::DataModel* history READ history NOTIFY dummySignal)
+	Q_PROPERTY(bool hasHistory READ hasHistory NOTIFY hasHistoryChanged)
+	Q_PROPERTY(bool saveHistory READ saveHistory WRITE saveHistory NOTIFY dummySignal)
+	Q_PROPERTY(int menuOffset READ menuOffset WRITE menuOffset NOTIFY menuOffsetChanged)
+
+private:
+    enum ThemeColor
+    {
+    	Bright = 2,
+    	Dark = 1,
+    	Default = 0
+    };
 
 public:
     // This is our constructor that sets up the recipe.
-    Frontend();
+    Frontend(int theme);
     ~Frontend();
 
     /* Invokable functions that we can call from QML*/
@@ -86,6 +118,10 @@ public:
     Q_INVOKABLE
     void setInputValue(int player, QString button, int value);
     Q_INVOKABLE
+    void setMogaInputValue(int player, QString button, int index);
+    Q_INVOKABLE
+    int getMogaInputValue(int player, QString button);
+    Q_INVOKABLE
     void SaveState();
     Q_INVOKABLE
     void LoadState();
@@ -97,6 +133,14 @@ public:
     void ExitEmulator();
     Q_INVOKABLE
 	void loadBoxArt(const QString &url);
+    Q_INVOKABLE
+    void setBright(int index);
+    Q_INVOKABLE
+	void removeFromHistory(QString uuid);
+    Q_INVOKABLE
+	void clearHistory();
+    Q_INVOKABLE
+    void swipedown();
 
     QString getRom();
     int getVideo();
@@ -111,29 +155,70 @@ signals:
 	void audioChanged(int);
 	void boxArtChanged(ImageLoader*);
 	void boxartLoadedChanged(bool);
+	void dummySignal();
+	void hdmiDetected(bool hdmi);
+	void hasHistoryChanged();
+	void invoked(QString url);
+	void menuOffsetChanged();
 
 public slots:
 	void addCheatToggle(int);
 	void addCheatDropDown(int);
 	void onManualExit();
 	void onBoxArtRecieved(const QString &info, bool success);
+	void onInvoke(const bb::system::InvokeRequest& req);
+	void showMenuFinished();
+	void onMenuOffsetChanged();
 	//void emitSendCheat();
 	//void handleSendCheat();
 
 private:
+    inline bool hasKeyboard() const { deviceinfo_details_t* details; deviceinfo_get_details(&details); bool retval = deviceinfo_details_get_keyboard(details) == DEVICEINFO_KEYBOARD_PRESENT; deviceinfo_free_details(&details); return retval; }
+    inline bool getBright() const { return m_isbright; }
+    inline int colorIndex() const { return m_color == Bright ? 0 : (m_color == Default ? (m_isbright ? 0 : 1) : 1); }
+    inline int width() const { bb::device::DisplayInfo info; return info.pixelSize().width(); }
+    inline int height() const { bb::device::DisplayInfo info; return info.pixelSize().height(); }
+    inline int emuWidth() const { int w = width(); int h = height(); if (h > w) return h; return w; }
+    inline int emuHeight() const { int w = width(); int h = height(); if (h > w) return w; return h; }
+    inline QString getStartDirectory() const { return m_settings->value("StartDirectory", "").toString(); }
+    inline void setStartDirectory(const QString& dir) { m_settings->setValue("StartDirectory", dir); }
+    inline bool hasStartDirectory() const { return (getStartDirectory()).length() > 0; }
+    inline bb::cascades::DataModel* devices() const { return m_devices; }
+    inline bb::cascades::DataModel* history() const { return m_history; }
+    inline bool hasHistory() const { return m_history->size() > 0; }
+    inline bool saveHistory() const { return m_settings->value("SAVE_HISTORY", true).toBool(); }
+    inline void saveHistory(bool value) { m_settings->setValue("SAVE_HISTORY", value); clearHistory(); }
+    inline int menuOffset() const { return m_menuOffset; }
+    inline void menuOffset(int offset) { m_menuOffset = offset; emit menuOffsetChanged(); }
     void run();
     Container *createCheatToggle(sCheatInfo *pCur);
     Container *createCheatDropDown(sCheatInfo *pCur);
     void create_button_mapper();
     bool boxartLoaded();
 	ImageLoader* getBoxArt();
+	void discoverControllers();
+	void detectHDMI();
+	QList<Game> getHistory();
+	void setHistory(QList<Game> list);
+	void addToHistory(QString title);
+
+private:
     bool mStartEmu;
     int mVideoPlugin;
     QString mRom;
+    QSettings *m_settings;
+    QMutex *m_animationLock;
     int mAudio;
     Container *mCheatsContainer;
     ImageLoader* m_boxart;
 	bool m_boxartLoaded;
+    bool m_isbright;
+    int m_menuOffset;
+    ThemeColor m_color;
+    bb::device::DisplayInfo *m_hdmiInfo;
+    bb::cascades::QMapListDataModel* m_devices;
+    bb::cascades::QMapListDataModel* m_history;
+    QPropertyAnimation* m_menuAnimation;
 };
 
 #endif // ifndef STARSHIPSETTINGSAPP_H

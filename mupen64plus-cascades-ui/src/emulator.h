@@ -4,13 +4,13 @@
 #include <string>
 #include <bb/cascades/Application>
 
-#ifdef __cplusplus
+/*#ifdef __cplusplus
 extern "C" {
-#endif
+#endif*/
 #include "cheat.h"
-#ifdef __cplusplus
+/*#ifdef __cplusplus
 }
-#endif
+#endif*/
 
 typedef struct {
 	int a;
@@ -44,17 +44,20 @@ public:
 	void SetRom(const char * rom );
 	int LoadRom();
 	char * l_CheatNumList;
+	char l_RomName[256];
 	Controller controller[4];
 	void save_controller_config(int iCtrlIdx);
 	void SaveState();
 	void LoadState();
 	void LoadTouchOverlay();
 	void ExitEmulator();
+	int print_controller_config();
 
 private:
 	int load_controller_config(const char *SectionName, int i);
 	int init_controller_config();
-	int print_controller_config();
+	unsigned char* loadFromFile(int* error, size_t* size);
+	unsigned char* loadFromZip(int* error, size_t* size);
 };
 
 #endif // ifndef EMUALTOR_H

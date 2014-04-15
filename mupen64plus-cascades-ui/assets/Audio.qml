@@ -30,6 +30,7 @@ Page {
         id: titleBar4
         title: "Audio Settings"
         visibility:  ChromeVisibility.Visible
+        scrollBehavior: TitleBarScrollBehavior.Sticky
     }
      
 	Container {

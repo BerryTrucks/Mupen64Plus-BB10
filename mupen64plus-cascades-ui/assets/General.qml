@@ -9,6 +9,7 @@ Page {
         id: titleBar3
         title: "General Settings"
         visibility:  ChromeVisibility.Visible
+        scrollBehavior: TitleBarScrollBehavior.Sticky
     }
     
     actions: [
@@ -33,125 +34,200 @@ Page {
         }
     ]
     
-    Container{
-        topPadding: 20
-        leftPadding: 20
-        rightPadding: 20
-        
-        Container {
-            horizontalAlignment: HorizontalAlignment.Center
-            preferredWidth: 768
+    ScrollView {
+	    Container{
+	        topPadding: 20
+	        leftPadding: 20
+	        rightPadding: 20
+	        
+	        Container {
+	            horizontalAlignment: HorizontalAlignment.Center
+	            preferredWidth: 768
+	            
+	            layout: StackLayout {
+	                orientation: LayoutOrientation.LeftToRight
+	            }
+	        
+	            Label {
+	                horizontalAlignment: HorizontalAlignment.Left
+	                verticalAlignment: VerticalAlignment.Center
+	                preferredWidth: 768
+	                text: "Default to SD Card"
+	            }
+	            
+	            ToggleButton {
+	                id: sdcard
+	                checked: _frontend.getValueFor(objectName, "false")
+	                objectName: "sdcard"
+	                horizontalAlignment: HorizontalAlignment.Right
+	                onCheckedChanged: {
+	                    _frontend.saveValueFor(sdcard.objectName, checked)
+	                }
+	            }
+	            
+	        }
+	        
+	        Label {
+	            id: _help
+	            text: "When choosing a ROM, the SD Card will be the default location to search"
+	            multiline: true
+	            visible: helpEnabled
+	            textStyle {
+	                base: SystemDefaults.TextStyles.BodyText
+	                fontStyle: FontStyle.Italic
+	            } 
+	        }
+	        
+	        Divider {}
+	        
+	        Container {
+	            horizontalAlignment: HorizontalAlignment.Center
+	            
+	            layout: StackLayout {
+	                orientation: LayoutOrientation.LeftToRight
+	            }
+	        
+	            Label {
+	                horizontalAlignment: HorizontalAlignment.Left
+	                verticalAlignment: VerticalAlignment.Center
+	                preferredWidth: 768
+	                text: "Per Rom Video Settings"
+	            }
+	            
+	            ToggleButton {
+	                id: perRom
+	                checked: _frontend.getValueFor(objectName, "true")
+	                objectName: "perRom"
+	                horizontalAlignment: HorizontalAlignment.Right
+	                onCheckedChanged: {
+	                    _frontend.saveValueFor(perRom.objectName, checked)
+	                }
+	            }
+	        }
+	        
+	        Label {
+	            id: _help2
+	            text: "When a ROM is selected, remember the values previously set for it."
+	            multiline: true
+	            visible: helpEnabled
+	            textStyle {
+	                base: SystemDefaults.TextStyles.BodyText
+	                fontStyle: FontStyle.Italic
+	            } 
+	        }
+	        
+	        Divider {}
+	        
+	        Container {
+	            horizontalAlignment: HorizontalAlignment.Center
+	            
+	            layout: StackLayout {
+	                orientation: LayoutOrientation.LeftToRight
+	            }
+	        
+	            Label {
+	                horizontalAlignment: HorizontalAlignment.Left
+	                verticalAlignment: VerticalAlignment.Center
+	                preferredWidth: 768
+	                text: "Boxart Scraping"
+	            }
+	            
+	            ToggleButton {
+	                id: boxart
+	                checked: _frontend.getValueFor(objectName, "true")
+	                objectName: "boxart"
+	                horizontalAlignment: HorizontalAlignment.Right
+	                onCheckedChanged: {
+	                    _frontend.saveValueFor(boxart.objectName, checked)
+	                }
+	            }
+	        }
+	        
+	        Label {
+	            id: _help3
+	            text: "Boxart for roms will be automatically downloaded and displayed."
+	            multiline: true
+	            visible: helpEnabled
+	            textStyle {
+	                base: SystemDefaults.TextStyles.BodyText
+	                fontStyle: FontStyle.Italic
+	            } 
+	        }
+	        
+            Divider {}
             
-            layout: StackLayout {
-                orientation: LayoutOrientation.LeftToRight
-            }
-        
-            Label {
-                horizontalAlignment: HorizontalAlignment.Left
-                verticalAlignment: VerticalAlignment.Center
-                preferredWidth: 768
-                text: "Default to SD Card"
-            }
-            
-            ToggleButton {
-                id: sdcard
-                checked: _frontend.getValueFor(objectName, "false")
-                objectName: "sdcard"
-                horizontalAlignment: HorizontalAlignment.Right
-                onCheckedChanged: {
-                    _frontend.saveValueFor(sdcard.objectName, checked)
+            Container {
+                horizontalAlignment: HorizontalAlignment.Center
+                
+                layout: StackLayout {
+                    orientation: LayoutOrientation.LeftToRight
+                }
+                
+                Label {
+                    horizontalAlignment: HorizontalAlignment.Left
+                    verticalAlignment: VerticalAlignment.Center
+                    preferredWidth: 768
+                    text: "Save History"
+                }
+                
+                ToggleButton {
+                    id: saveHistory
+                    horizontalAlignment: HorizontalAlignment.Right
+                    onCheckedChanged: {
+                        _frontend.saveHistory = checked
+                    }
+                    onCreationCompleted: {
+                        checked = _frontend.saveHistory
+                    }
                 }
             }
             
-        }
-        
-        Label {
-            id: _help
-            text: "When choosing a ROM, the SD Card will be the default location to search"
-            multiline: true
-            visible: helpEnabled
-            textStyle {
-                base: SystemDefaults.TextStyles.BodyText
-                fontStyle: FontStyle.Italic
-            } 
-        }
-        
-        Divider {}
-        
-        Container {
-            horizontalAlignment: HorizontalAlignment.Center
-            
-            layout: StackLayout {
-                orientation: LayoutOrientation.LeftToRight
-            }
-        
             Label {
-                horizontalAlignment: HorizontalAlignment.Left
-                verticalAlignment: VerticalAlignment.Center
-                preferredWidth: 768
-                text: "Per Rom Video Settings"
+                id: _help4
+                text: "Played games will be remembered for easier access."
+                multiline: true
+                visible: helpEnabled
+                textStyle {
+                    base: SystemDefaults.TextStyles.BodyText
+                    fontStyle: FontStyle.Italic
+                } 
             }
             
-            ToggleButton {
-                id: perRom
-                checked: _frontend.getValueFor(objectName, "true")
-                objectName: "perRom"
-                horizontalAlignment: HorizontalAlignment.Right
-                onCheckedChanged: {
-                    _frontend.saveValueFor(perRom.objectName, checked)
-                }
-            }
-        }
-        
-        Label {
-            id: _help2
-            text: "When a ROM is selected, remember the values previously set for it."
-            multiline: true
-            visible: helpEnabled
-            textStyle {
-                base: SystemDefaults.TextStyles.BodyText
-                fontStyle: FontStyle.Italic
-            } 
-        }
-        
-        Divider {}
-        
-        Container {
-            horizontalAlignment: HorizontalAlignment.Center
-            
-            layout: StackLayout {
-                orientation: LayoutOrientation.LeftToRight
-            }
-        
-            Label {
-                horizontalAlignment: HorizontalAlignment.Left
-                verticalAlignment: VerticalAlignment.Center
-                preferredWidth: 768
-                text: "Boxart Scraping"
-            }
-            
-            ToggleButton {
-                id: boxart
-                checked: _frontend.getValueFor(objectName, "true")
-                objectName: "boxart"
-                horizontalAlignment: HorizontalAlignment.Right
-                onCheckedChanged: {
-                    _frontend.saveValueFor(boxart.objectName, checked)
-                }
-            }
-        }
-        
-        Label {
-            id: _help3
-            text: "Boxart for roms will be automatically downloaded and displayed."
-            multiline: true
-            visible: helpEnabled
-            textStyle {
-                base: SystemDefaults.TextStyles.BodyText
-                fontStyle: FontStyle.Italic
-            } 
-        }
-        
-        Divider {}
-    }
+            Divider {}
+	        
+	        Container {
+	            leftPadding: 15.0
+	            Label {
+	                text: qsTr("Default Theme")
+	                leftMargin: 15.0
+	            }
+	        }
+	        DropDown {
+	            horizontalAlignment: HorizontalAlignment.Center
+	            title: qsTr("Visual Theme")
+	            Option {
+	                text: qsTr("Bright")
+	            }
+	            Option {
+	                text: qsTr("Dark")
+	            }
+	            
+	            onSelectedIndexChanged: {
+	                _frontend.setBright(selectedIndex)
+	            }
+	            
+	            onCreationCompleted: {
+	                selectedIndex = _frontend.colorIndex
+	            }
+	        }
+	        Container {
+	            leftPadding: 15.0
+	            rightPadding: 15.0
+	            Label {
+	                text: qsTr("Restart the emulator for the colour theme change to take effect.")
+	                multiline: true
+	            }
+	        }
+	    }
+	}
 }

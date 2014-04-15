@@ -16,51 +16,7 @@ import bb.cascades 1.0
 import bb.cascades.pickers 1.0 
 
 TabbedPane {
-    property bool emulatorVisable: false
-    Menu.definition: MenuDefinition {
-	    actions: [
-	      ActionItem {
-	          title: "Save State"
-	          imageSource: "asset:///images/save_load.png"
-	          enabled: emulatorVisable
-	          onTriggered: {
-	              _frontend.SaveState();
-	          }
-	      },
-	      ActionItem {
-	          title: "Load State"
-	          imageSource: "asset:///images/save_load.png"
-	          enabled: emulatorVisable
-	          onTriggered: {
-  	              _frontend.LoadState();
-  	          }
-	      },
-	      ActionItem {
-  	          title: "Toggle Overlay"
-  	          imageSource: "asset:///images/overlay.png"
-  	          enabled: emulatorVisable
-  	          onTriggered: {
-  	              _frontend.LoadTouchOverlay();
-  	          }
-  	      },
-  	      ActionItem {
-	          title: "Menu (Broken)"
-	          imageSource: "asset:///images/home.png"
-	          enabled: emulatorVisable
-	          //enabled: false //TODO: Issues with restarting emu, SDL audio plugin crashes, can fix by not PluginUnload audio, but emu still crashes randomly, and on 3rd open.
-	          onTriggered: {
-  	              _frontend.ExitEmulator();
-  	              emulatorVisable = false;
-  	              OrientationSupport.supportedDisplayOrientation = 
-  	                                          SupportedDisplayOrientation.DisplayPortrait;
-  	          } 
-	      },
-	      ActionItem {
-  	          title: "Close"
-  	          imageSource: "asset:///images/ic_cancel.png"
-  	      }
-	    ]
-    }
+    id: mainPane
     //showTabsOnActionBar: true
     Tab {
         title: "Home" 
@@ -115,24 +71,25 @@ TabbedPane {
                 id: titleBar
                 title: "Cheat Codes"
                 visibility:  ChromeVisibility.Visible
+                scrollBehavior: TitleBarScrollBehavior.Sticky
             }
             ScrollView{
-                preferredHeight: 1280
-                preferredWidth: 768
+                preferredWidth: _frontend.width
+                preferredHeight: _frontend.height
                 
 		        Container {
-		            objectName: "cheats"
+                    objectName: "cheats"
 		            
 		            Container {
-		                preferredWidth: 768
-		                preferredHeight: 1000
+		                preferredWidth: _frontend.width
+		                preferredHeight: _frontend.height
 		            
 			            layout: DockLayout {}
 	            
 			            Label {
 			                verticalAlignment: VerticalAlignment.Center
 			                horizontalAlignment: HorizontalAlignment.Center
-			                text: "Select a ROM" 
+			                text: qsTr("Select a ROM") 
 			                textStyle {
 					            base: SystemDefaults.TextStyles.BigText
 					        }  

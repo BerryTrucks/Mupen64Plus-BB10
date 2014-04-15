@@ -4,9 +4,9 @@
 #include "emulator.h"
 #include <dlfcn.h>
 
-#ifdef __cplusplus
+/*#ifdef __cplusplus
 extern "C" {
-#endif
+#endif*/
 #include "cheat.h"
 #include "main.h"
 #include "plugin.h"
@@ -15,6 +15,14 @@ extern "C" {
 #include "compare_core.h"
 #include "osal_preproc.h"
 #include "bbutil.h"
+/*#ifdef __cplusplus
+}
+#endif*/
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+#include "unzip.h"
 #ifdef __cplusplus
 }
 #endif
@@ -151,6 +159,110 @@ void Emulator::SetRom(const char * rom ){
 	l_ROMFilepath = strdup(rom);
 }
 
+unsigned char* Emulator::loadFromFile(int* error, size_t* size)
+{
+	FILE *fPtr = fopen(l_ROMFilepath, "rb");
+	if (fPtr == NULL)
+	{
+		fprintf(stderr, "Error: couldn't open ROM file '%s' for reading.\n", l_ROMFilepath);
+		(*CoreShutdown)();
+		DetachCoreLib();
+		*error = 7;
+		return 0;
+	}
+
+	/* get the length of the ROM, allocate memory buffer, load it from disk */
+	fseek(fPtr, 0L, SEEK_END);
+	*size = ftell(fPtr);
+	fprintf(stderr, "Reading %u bytes from ROM image file '%s'.\n", *size, l_ROMFilepath);
+	fseek(fPtr, 0L, SEEK_SET);
+	unsigned char *ROM_buffer = (unsigned char *) malloc(*size);
+	if (ROM_buffer == NULL)
+	{
+		fprintf(stderr, "Error: couldn't allocate %u-byte buffer for ROM image file '%s'.\n", *size, l_ROMFilepath);
+		fclose(fPtr);
+		(*CoreShutdown)();
+		DetachCoreLib();
+		*error = 8;
+	}
+	else if (fread(ROM_buffer, 1, *size, fPtr) != *size)
+	{
+		fprintf(stderr, "Error: couldn't read %u bytes from ROM image file '%s'.\n", *size, l_ROMFilepath);
+		free(ROM_buffer);
+		fclose(fPtr);
+		(*CoreShutdown)();
+		DetachCoreLib();
+		*error = 9;
+	}
+	else
+		*error = 0;
+	fclose(fPtr);
+	return ROM_buffer;
+}
+
+unsigned char* Emulator::loadFromZip(int* error, size_t* size)
+{
+	unsigned char *ROM_buffer;
+	unzFile uf = unzOpen(l_ROMFilepath);
+	if (!uf)
+	{
+		fprintf(stderr, "Error: couldn't open ROM file '%s' for reading.\n", l_ROMFilepath);
+		(*CoreShutdown)();
+		DetachCoreLib();
+		*error = 7;
+		return 0;
+	}
+	unz_global_info gi;
+	int err = unzGetGlobalInfo(uf, &gi);
+	if (err != UNZ_OK) { }
+	for (uLong i = 0; i < gi.number_entry; i++)
+	{
+		char filename_inzip[256];
+		unz_file_info file_info;
+		err = unzGetCurrentFileInfo(uf, &file_info, filename_inzip, sizeof(filename_inzip), NULL, 0, NULL, 0);
+		if (err != UNZ_OK) { }
+		QString filename(filename_inzip);
+		if (filename.endsWith(".z64", Qt::CaseInsensitive) ||
+				filename.endsWith(".n64", Qt::CaseInsensitive) || filename.endsWith(".v64", Qt::CaseInsensitive))
+		{
+			*size = file_info.uncompressed_size;
+			err = unzOpenCurrentFile(uf);
+			if (err != UNZ_OK)
+			{
+				fprintf(stderr, "Error: couldn't open ROM file '%s' for reading.\n", l_ROMFilepath);
+				(*CoreShutdown)();
+				DetachCoreLib();
+				*error = 7;
+				break;
+			}
+			ROM_buffer = (unsigned char *) malloc(*size);
+			if (ROM_buffer == NULL)
+			{
+				fprintf(stderr, "Error: couldn't allocate %u-byte buffer for ROM image file '%s'.\n", *size, l_ROMFilepath);
+				(*CoreShutdown)();
+				DetachCoreLib();
+				*error = 8;
+			}
+			else if (unzReadCurrentFile(uf, ROM_buffer, *size) != *size)
+			{
+				fprintf(stderr, "Error: couldn't read %u bytes from ROM image file '%s'.\n", *size, l_ROMFilepath);
+				free(ROM_buffer);
+				(*CoreShutdown)();
+				DetachCoreLib();
+				*error = 9;
+			}
+			else
+				*error = 0;
+			unzCloseCurrentFile(uf);
+			break;
+		}
+		if ((i + 1) < gi.number_entry)
+			unzGoToNextFile(uf);
+	}
+	unzClose(uf);
+	return ROM_buffer;
+}
+
 int Emulator::LoadRom(){
 	static bool romOpened;
 /* load ROM image */
@@ -160,39 +272,19 @@ int Emulator::LoadRom(){
 		(*CoreDoCommand)(M64CMD_ROM_CLOSE, 0, NULL);
 	}
 
-	FILE *fPtr = fopen(l_ROMFilepath, "rb");
-	if (fPtr == NULL)
-	{
-		fprintf(stderr, "Error: couldn't open ROM file '%s' for reading.\n", l_ROMFilepath);
-		(*CoreShutdown)();
-		DetachCoreLib();
-		return 7;
-	}
-
-	/* get the length of the ROM, allocate memory buffer, load it from disk */
-	long romlength = 0;
-	fseek(fPtr, 0L, SEEK_END);
-	romlength = ftell(fPtr);
-	fseek(fPtr, 0L, SEEK_SET);
-	unsigned char *ROM_buffer = (unsigned char *) malloc(romlength);
-	if (ROM_buffer == NULL)
-	{
-		fprintf(stderr, "Error: couldn't allocate %li-byte buffer for ROM image file '%s'.\n", romlength, l_ROMFilepath);
-		fclose(fPtr);
-		(*CoreShutdown)();
-		DetachCoreLib();
-		return 8;
-	}
-	else if (fread(ROM_buffer, 1, romlength, fPtr) != romlength)
-	{
-		fprintf(stderr, "Error: couldn't read %li bytes from ROM image file '%s'.\n", romlength, l_ROMFilepath);
-		free(ROM_buffer);
-		fclose(fPtr);
-		(*CoreShutdown)();
-		DetachCoreLib();
-		return 9;
-	}
-	fclose(fPtr);
+	unsigned char *ROM_buffer;
+	size_t romlength = 0;
+	int error;
+	size_t pathLength, numpos;
+	pathLength = strlen(l_ROMFilepath);
+	const char* pos = strstr(l_ROMFilepath, "zip");
+	numpos = pos - l_ROMFilepath;
+	if (numpos == (pathLength - 3))
+		ROM_buffer = loadFromZip(&error, &romlength);
+	else
+		ROM_buffer = loadFromFile(&error, &romlength);
+	if (error != 0)
+		return error;
 
 	/* Try to load the ROM image into the core */
 	if ((*CoreDoCommand)(M64CMD_ROM_OPEN, (int) romlength, ROM_buffer) != M64ERR_SUCCESS)
@@ -202,6 +294,19 @@ int Emulator::LoadRom(){
 		(*CoreShutdown)();
 		DetachCoreLib();
 		return 10;
+	}
+	// Get the ROMs good name.
+	{
+		m64p_rom_settings rom_settings;
+		if ((*CoreDoCommand)(M64CMD_ROM_GET_SETTINGS, sizeof(m64p_rom_settings), &rom_settings) == M64ERR_SUCCESS)
+		{
+			strncpy(l_RomName, rom_settings.goodname, 255);
+			l_RomName[255] = '\0';
+		}
+		else
+		{
+			strcpy(l_RomName, "--\0");
+		}
 	}
 	free(ROM_buffer); /* the core copies the ROM image, so we can release this buffer immediately */
 	fflush(stderr);
@@ -218,6 +323,8 @@ int Emulator::Start(){
 		printf("Error initializing EGL...\n");fflush(stdout);
 		return -1;
 	}
+
+
 
 	printf("Finished EGl init...\n");fflush(stdout);
 
@@ -498,24 +605,24 @@ int Emulator::print_controller_config() {
 	int i, j;
 
 	for(i=0; i<4; ++i){
-		printf("Controller %d::", i);
-		printf("Preset: %d\n", controller[i].present);
-		printf("Plugin: %d\n", controller[i].plugin);
-		printf("Device: %d\n", controller[i].device);
-		printf("Mouse: %d\n", controller[i].mouse);
-		printf("Layout: %d\n", controller[i].layout);
+		fprintf(stderr, "Controller %d::", i);
+		fprintf(stderr, "Preset: %d\n", controller[i].present);
+		fprintf(stderr, "Plugin: %d\n", controller[i].plugin);
+		fprintf(stderr, "Device: %d\n", controller[i].device);
+		fprintf(stderr, "Mouse: %d\n", controller[i].mouse);
+		fprintf(stderr, "Layout: %d\n", controller[i].layout);
 
 		for(j=0; j<16; ++j){
-			printf("Button %d: %d\n", j, controller[i].button[j]);
+			fprintf(stderr, "Button %d: %d\n", j, controller[i].button[j]);
 		}
 		for(j=0; j<2; ++j){
-			printf("Axis a%d: %d\n", j, controller[i].axis[j].a);
-			printf("Axis b%d: %d\n", j, controller[i].axis[j].b);
+			fprintf(stderr, "Axis a%d: %d\n", j, controller[i].axis[j].a);
+			fprintf(stderr, "Axis b%d: %d\n", j, controller[i].axis[j].b);
 		}
 
 		for(j=0; j<2; ++j){
-			printf("DeadZone%d: %d\n", j, controller[i].analogDeadZone[j]);
-			printf("AnalogPeak%d: %d\n", j, controller[i].analogPeak[j]);
+			fprintf(stderr, "DeadZone%d: %d\n", j, controller[i].analogDeadZone[j]);
+			fprintf(stderr, "AnalogPeak%d: %d\n", j, controller[i].analogPeak[j]);
 		}
 	}
 }
