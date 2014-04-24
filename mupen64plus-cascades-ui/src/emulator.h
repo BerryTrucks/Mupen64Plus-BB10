@@ -30,6 +30,7 @@ typedef struct {
 
 	int analogDeadZone[2];
 	int analogPeak[2];
+	char gamepadId[64];
 } Controller;
 
 extern const char *button_names[];

@@ -99,4 +99,25 @@ TabbedPane {
 	        }
 	    }
     }
+    
+    Menu.definition: MenuDefinition {
+        actions: [
+            ActionItem {
+                title: qsTr("About")
+                imageSource: "asset:///images/ic_info.png"
+                
+                onTriggered: {
+                    var sheet = aboutSheet.createObject()
+                    sheet.open()
+                }
+            }
+        ]
+    }
+    
+    attachedObjects: [
+        ComponentDefinition {
+            id: aboutSheet
+            source: "about.qml"
+        }
+    ]
 }

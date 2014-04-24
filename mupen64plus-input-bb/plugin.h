@@ -104,6 +104,7 @@ typedef struct
 
 /* global data definitions */
 extern SController controller[4];   // 4 controllers
+extern char gamepadId[4][256];
 
 /* global function definitions */
 extern void DebugMessage(int level, const char *message, ...);

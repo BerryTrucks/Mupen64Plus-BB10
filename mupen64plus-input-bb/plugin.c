@@ -44,6 +44,7 @@
 
 #include "touch.h"
 #include "input.h"
+#include "gamepad.h"
 
 #ifdef __linux__
 #include <unistd.h>
@@ -476,8 +477,11 @@ EXPORT void CALL Native_KeyUpDown(void *event){
 	case SCREEN_EVENT_KEYBOARD:
 		ProcessKeyboardEvent(screen_event, &controller[0],button_bits);
 		break;
+	case SCREEN_EVENT_GAMEPAD:
+	case SCREEN_EVENT_JOYSTICK:
+		ProcessGamepadEvent(screen_event, &controller[0],button_bits);
+		break;
 	}
-
 }
 
 void PB_HandleEvents(){
@@ -504,6 +508,8 @@ void PB_HandleEvents(){
 			case SCREEN_EVENT_MTOUCH_MOVE:
 			case SCREEN_EVENT_MTOUCH_RELEASE:
 			case SCREEN_EVENT_KEYBOARD:
+			case SCREEN_EVENT_GAMEPAD:
+			case SCREEN_EVENT_JOYSTICK:
 				Native_KeyUpDown((void*)&screen_event);
 				break;
 			}
@@ -712,9 +718,10 @@ static void InitiateRumble(int cntrl)
 EXPORT void CALL InitiateControllers(CONTROL_INFO ControlInfo)
 {
     int i;
+	fprintf(stderr, "initiate controllers\n");
 
     // reset controllers
-    memset( controller, 0, sizeof( SController ) * 4 );
+    //memset( controller, 0, sizeof( SController ) * 4 );
     for ( i = 0; i < SDLK_LAST; i++)
     {
         myKeyState[i] = 0;
@@ -726,6 +733,8 @@ EXPORT void CALL InitiateControllers(CONTROL_INFO ControlInfo)
 
     // read configuration
     load_configuration(1);
+	
+	initGamePad();
 
     for( i = 0; i < 4; i++ )
     {

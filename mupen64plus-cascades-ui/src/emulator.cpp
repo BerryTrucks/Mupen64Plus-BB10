@@ -394,6 +394,8 @@ int Emulator::Start(){
 		}
 	}
 
+	bbutil_focus();
+
 	/* run the game */
 	(*CoreDoCommand)(M64CMD_EXECUTE, 0, NULL);
 
@@ -650,6 +652,8 @@ int Emulator::load_controller_config(const char *SectionName, int i) {
             break;
         if (ConfigGetParameter(pConfig, "device", M64TYPE_INT, &controller[i].device, sizeof(int)) != M64ERR_SUCCESS)
             break;
+        if (ConfigGetParameter(pConfig, "gamepadid", M64TYPE_STRING, &controller[i].gamepadId, 64) != M64ERR_SUCCESS)
+        	memset(controller[i].gamepadId, 0, 64);
         /* then do the optional parameters */
         ConfigGetParameter(pConfig, "mouse", M64TYPE_BOOL, &controller[i].mouse, sizeof(int));
         if (ConfigGetParameter(pConfig, "layout", M64TYPE_INT, &controller[i].layout, sizeof(int)) != M64ERR_SUCCESS)
@@ -765,6 +769,7 @@ void Emulator::save_controller_config(int iCtrlIdx)
     ConfigSetDefaultBool(pConfig, "mouse", controller[iCtrlIdx].mouse, "If True, then mouse buttons may be used with this controller");
     ConfigSetDefaultInt(pConfig, "device", controller[iCtrlIdx].device, "Specifies which joystick is bound to this controller: -3=TouchScreen, -2=Keyboard/mouse, -1=Auto config, 0 or more= SDL Joystick number");
     ConfigSetDefaultInt(pConfig, "layout", controller[iCtrlIdx].layout, "Specifies the initial touchscreen overlay used.");
+    ConfigSetDefaultString(pConfig, "gamepadid", controller[iCtrlIdx].gamepadId, "The ID of the gamepad used for this controller.");
 
     //Touchscreen
     if(controller[iCtrlIdx].device == -3){
@@ -837,7 +842,8 @@ void Emulator::save_controller_config(int iCtrlIdx)
         const char *Help;
         int len = 0;
         ParamString[0] = 0;
-        if (controller[iCtrlIdx].axis[j].a > 0 && controller[iCtrlIdx].axis[j].b > 0)
+        if ((controller[iCtrlIdx].axis[j].a > 0 && controller[iCtrlIdx].axis[j].b > 0) ||
+        		controller[iCtrlIdx].axis[j].a == -2 || controller[iCtrlIdx].axis[j].a == -3)
         {
             sprintf(Param, "key(%i,%i) ", controller[iCtrlIdx].axis[j].a, controller[iCtrlIdx].axis[j].b);
             strcat(ParamString, Param);

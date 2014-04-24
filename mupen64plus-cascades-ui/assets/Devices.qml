@@ -27,15 +27,18 @@ Container {
         
         onSelectedIndexChanged: {
             if(selectedIndex == 0){
-               _frontend.setInputValue(player, "present", 0);
+                _frontend.setInputValue(player, "present", 0);
+                deviceList.selectedIndex = 0
             } else {
                 if (selectedIndex == 1) {
                     _frontend.setInputValue(player, "device", -3);
+                    deviceList.selectedIndex = 0
                 } else if (selectedIndex == 2) {
                     _frontend.setInputValue(player, "device", -2);
+                    deviceList.selectedIndex = 0
                     _skin.selectedIndex = 0
                 } else if (selectedIndex == 3) {
-                    _gptype.selectedIndex = 0
+                    _frontend.setInputValue(player, "device", -4);
                     _skin.selectedIndex = 0
                 }
                 _frontend.setInputValue(player, "present", 1);
@@ -113,7 +116,7 @@ Container {
 		    }
 		    ButtonMap {
 		        id: start1 
-		        button: "Start" 
+		        button: "Start"
 		    }
 		    ButtonMap {
 		        id: z1
@@ -183,43 +186,37 @@ Container {
 	    id:_gamepad
 	    
         visible: _device.selectedIndex == 3
-        DropDown {
-            id: _gptype
-            title: qsTr("GamePad Type")
-            Option {
-                text: qsTr("Generic")
-                imageSource: "asset:///images/ca_bluetooth.png"
-                selected: true
-            }
-            Option {
-                text: qsTr("Moga")
-
-                imageSource: "asset:///images/moga.png"
-            }
-            
-            onCreationCompleted: {
-                if (_frontend.getInputValue(player,"device") == -5) {
-                    selectedIndex = 1
-                }
-                else {
-                    selectedIndex = 0
-                }
-            }
-            
-            onSelectedIndexChanged: {
-                if (selectedIndex == 0) {
-                    _frontend.setInputValue(player, "device", -4);
-                }
-                else if (selectedIndex == 1) {
-                    _frontend.setInputValue(player, "device", -5);
-                }
-            }
-        }
         ScrollView {
-            visible: _gptype.selectedIndex == 1
             horizontalAlignment: HorizontalAlignment.Fill
             Container {
                 horizontalAlignment: HorizontalAlignment.Fill
+                DropDown {
+                    id: deviceList
+                    title: qsTr("Controller")
+                    objectName: "deviceList" + player
+                    selectedIndex: 1
+
+                    Option {
+                        text: qsTr("None")
+                        selected: true
+                    }
+
+                    onOptionAdded: {
+                        selectedIndex = _frontend.getControllerIndex(player)
+                    }
+
+                    function setSelectedIndex(selectedIndex) {
+                        _frontend.setControllerIndex(player, selectedIndex)
+                    }
+                    
+                    function controllersDetected() {
+                        selectedIndexChanged.connect(setSelectedIndex)
+                    }
+                    
+                    onCreationCompleted: {
+                        _frontend.controllersDetected.connect(controllersDetected)
+                    }
+                }
                 MogaButtonMap {
                     id: dr2
                     button: "DPad R"
@@ -284,74 +281,72 @@ Container {
                     id: rumble2
                     button: "Rumblepak switch"
                 }
+                DropDown {
+                    id: _analogType
+                    title: qsTr("Analog Stick Type")
+                    
+                    options: [
+                        Option {
+                            text: qsTr("Keys")
+                        },
+                        Option {
+                            text: qsTr("Analog0")
+                        },
+                        Option {
+                            text: qsTr("Analog1")
+                        }
+                    ]
+                    
+                    onCreationCompleted: {
+                        var i = _frontend.getInputValue(player, "X Axis Left")
+                        if (i == -2) {
+                            selectedIndex = 1
+                        }
+                        else if (i == -3) {
+                            selectedIndex = 2
+                        }
+                        else {
+                            selectedIndex = 0
+                        }
+                        selectedIndexChanged.connect(selectionChanged)
+                    }
+                    
+                    function selectionChanged(index) {
+                        if (index == 1) {
+                            _frontend.setInputValue(player,"X Axis Left",-2)
+                        }
+                        else if (index == 2) {
+                            _frontend.setInputValue(player,"X Axis Left",-3)
+                        }
+                        else {
+                            _frontend.setInputValue(player,"X Axis Left",-1)
+                        }
+                    }
+                }
+                Divider {
+                }
                 MogaButtonMap {
                     id: xl2
+                    visible: _analogType.selectedIndex == 0
                     button: "X Axis Left"
                 }
                 MogaButtonMap {
                     id: xr2
+                    visible: _analogType.selectedIndex == 0
                     button: "X Axis Right"
                 }
                 MogaButtonMap {
                     id: xu2
+                    visible: _analogType.selectedIndex == 0
                     button: "Y Axis Up"
                 }
                 MogaButtonMap {
                     id: xd2
+                    visible: _analogType.selectedIndex == 0
                     button: "Y Axis Down"
                 }
             }
         }
-        Container {
-            visible: _gptype.selectedIndex == 0
-            Label {
-                text: qsTr("Coming Soon")
-                textStyle.color: Color.Red
-                horizontalAlignment: HorizontalAlignment.Center
-            }
-            Divider {}
-	        ListView {
-	            dataModel: _frontend.devices
-	            
-	            listItemComponents: [
-	                ListItemComponent {
-	                    type: ""
-	
-	                    Container {
-	                        Container {
-	                            layout: StackLayout {
-	                                orientation: LayoutOrientation.LeftToRight
-	                            }
-	                            Container {
-	                                verticalAlignment: VerticalAlignment.Center
-	                                ImageView {
-	                                    imageSource: "asset:///images/ca_bluetooth.png"
-	                                }
-	                            }
-	                            Container {
-	                                leftPadding: 15.0
-	                                verticalAlignment: VerticalAlignment.Center
-	                                Container {
-	                                    Label {
-	                                        text: ListItemData.name
-	                                        textStyle.fontSize: FontSize.Large
-	                                    }
-	                                }
-	                                Container {
-	                                    Label {
-	                                        textStyle.fontSize: FontSize.Small
-	                                        text: ListItemData.description
-	                                    }
-	                                }
-	                            }
-	                        }
-	                        Divider {
-	                        }
-	                    }
-	                }
-	            ]
-	        }
-	    }
     }
 	
     function reset() {

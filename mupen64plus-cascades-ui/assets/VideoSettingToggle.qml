@@ -54,6 +54,7 @@ Container {
     
     Label {
         id: help
+        multiline: true
         textStyle {
             base: SystemDefaults.TextStyles.BodyText
             fontStyle: FontStyle.Italic

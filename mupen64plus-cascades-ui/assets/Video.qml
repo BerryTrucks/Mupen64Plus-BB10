@@ -2,7 +2,7 @@ import bb.cascades 1.0
 
 Page {
     id: video
-    property alias videoPlugin: videoPlugin.selectedIndex
+    property alias videoPlugin: videoPlugin2.selectedIndex
     titleBar: TitleBar {
         id: titleBar2
         title: "Video Plugin Settings"
@@ -76,6 +76,20 @@ Page {
 		            text: "GLES2n64"
 		            value: "n64"
 		        }
+
+		        onCreationCompleted: {
+		            if (_frontend.debugMode) {
+		                add(glide64)
+		            }
+		        }
+		        
+		        attachedObjects: [
+		            Option {
+		                id: glide64
+		                text: "Glide64 mk2"
+                        value: "Glide64mk2"
+		            }
+		        ]
 		    }
 		}
 	    
@@ -86,7 +100,7 @@ Page {
 	        
 	        ScrollView {
 	            preferredHeight: 1280
-	            Container{
+	            Container {
 	                Container {
 	                    visible: general.selected
 	                    horizontalAlignment: HorizontalAlignment.Center
@@ -98,13 +112,11 @@ Page {
 	                            orientation: LayoutOrientation.LeftToRight
 	                        }
 	        	            DropDown {
-	        	                id: videoPlugin
+	        	                id: videoPlugin2
 	        	                objectName: "videoPlugin"
 	        	                horizontalAlignment: HorizontalAlignment.Right
 	        	                title: "Video Plugin"
-	        	                
-	        	
-	        	                // Button 1
+
 	        	                Option {
 	        	                    id: gles2rice
 	        	                    objectName: "gles2rice"
@@ -116,25 +128,44 @@ Page {
 	        	                        _frontend.saveValueFor(_frontend.rom.substr(_frontend.rom.lastIndexOf('/')+1) + gles2rice.objectName, gles2rice.selected);
 	        	                    }
 	        	                }
-	        	
-	        	                // Button 2
+
 	        	                Option {
 	        	                    id: gles2n64
 	        	                    objectName: "gles2n64"
 	        	                    text: "GLES2n64"
-	        	
+
 	        	                    // Call our C++ getValueFor() function for objectName, which connects to the QSettings.
 	        	                    selected: _frontend.getValueFor(_frontend.rom.substr(_frontend.rom.lastIndexOf('/')+1) + objectName, "false")
 	        	                    onSelectedChanged: {
 	        	                        _frontend.saveValueFor(_frontend.rom.substr(_frontend.rom.lastIndexOf('/')+1) + gles2n64.objectName, gles2n64.selected);
 	        	                    }
-	        	                }
+                                }
+                                
+                                onCreationCompleted: {
+                                    if (_frontend.debugMode) {
+                                        videoPlugin2.add(glide64mk2)
+                                    }
+                                }
+                                
+                                attachedObjects: [
+                                    Option {
+                                        id: glide64mk2
+                                        objectName: "glide64mk2"
+                                        text: "Glide64mk2"
+                                        
+                                        // Call our C++ getValueFor() function for objectName, which connects to the QSettings.
+                                        selected: _frontend.getValueFor(_frontend.rom.substr(_frontend.rom.lastIndexOf('/')+1) + objectName, "false")
+                                        onSelectedChanged: {
+                                            _frontend.saveValueFor(_frontend.rom.substr(_frontend.rom.lastIndexOf('/')+1) + glide64mk2.objectName, glide64mk2.selected);
+                                        }
+                                    }
+                                ]
 	        	            }
 	        	        }
 	        	        Divider {}
 	                }
 	                
-			        Container{
+			        Container {
 			            visible: rice.selected
 			            horizontalAlignment: HorizontalAlignment.Center
 			            
@@ -291,8 +322,86 @@ Page {
 					        showHelp: help.helpEnabled
 					        plugin: "gles2n64"
 					        defaultValue: "True"
-					    }		            
-				    }
+					    }
+                    }
+                    
+                    Container {
+                        visible: glide64.selected
+                        
+                        Button {
+                            text: qsTr("Compatibility List")
+                            horizontalAlignment: HorizontalAlignment.Fill
+                            
+                            onClicked: {
+                                var sheet = compatSheet.createObject()
+                                sheet.open()
+                            }
+                        }
+                        
+                        VideoSettingToggle {
+                            id: ref
+                            title: "Read Every Frame"
+                            settingName: "fb_read_always"
+                            help: "Read framebuffer every frame (may be slow use only for effects that need it e.g. Banjo Kazooie, DK64 transitions)"
+                            showHelp: help.helpEnabled
+                            plugin: "Video-Glide64mk2"
+                            defaultValue: "False"
+                        }
+                        
+                        Container {
+                            DropDown {
+                                title: qsTr("Hi-res Mode")
+                                horizontalAlignment: HorizontalAlignment.Right
+                                verticalAlignment: VerticalAlignment.Center
+
+                                Option {
+                                    text: qsTr("Game Default")
+                                }
+                                Option {
+                                    text: qsTr("Disable")
+                                }
+                                Option {
+                                    text: qsTr("Enable")
+                                }
+                                
+                                onCreationCompleted: {
+                                    var val = _frontend.getConfigValue(_frontend.rom, "Video-Glide64mk2", "fb_hires", "-1")
+                                    if (val == 1) {
+                                        selectedIndex = 2
+                                    }
+                                    else if (val == 0) {
+                                        selectedIndex = 1
+                                    }
+                                    else {
+                                        selectedIndex = 0
+                                    }
+                                }
+                                
+                                onSelectedIndexChanged: {
+                                    _frontend.saveConfigValue("Video-Glide64mk2", "fb_hires", selectedIndex - 1)
+                                }
+                            }
+                            
+                            Label {
+                                multiline: true
+                                visible: help.helpEnabled
+                                text: qsTr("Hardware frame buffer emulation")
+                                textStyle {
+                                    base: SystemDefaults.TextStyles.BodyText
+                                    fontStyle: FontStyle.Italic
+                                } 
+                            }
+                            
+                            Divider { }
+                        }
+
+                        attachedObjects: [
+                            ComponentDefinition {
+                                id: compatSheet
+                                source: "glidecompat.qml"
+                            }
+                        ]
+                    }
 				}
 			}
 	    }

@@ -175,6 +175,9 @@ int bbutil_calculate_dpi(screen_context_t ctx);
 int bbutil_offset_menu(int offset);
 int bbutil_close_menu();
 int bbutil_is_menu_open();
+void bbutil_focus();
+
+int bbutil_screencapture(const char* filename, int x, int y, int width, int height);
 
 /**
  * Rotates the screen to a given angle

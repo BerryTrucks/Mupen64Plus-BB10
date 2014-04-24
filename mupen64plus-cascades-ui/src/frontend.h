@@ -20,7 +20,9 @@
 #include <bb/cascades/Application>
 #include <bb/cascades/Container>
 #include <bb/cascades/DataModel>
+#include <bb/cascades/DropDown>
 #include <bb/cascades/QListDataModel>
+#include <bb/cascades/TabbedPane>
 #include <bb/system/InvokeRequest>
 #include "emulator.h"
 #include <QThread>
@@ -35,6 +37,11 @@
 #include "NetRequest.hpp"
 
 using namespace bb::cascades;
+
+#define VERSION_MAJOR 1
+#define VERSION_MINOR 1
+#define VERSION_RELEASE 3
+
 /**
  * StarshipSettings Description:
  *
@@ -66,6 +73,9 @@ class Frontend: public QThread
 	Q_PROPERTY(bool hasHistory READ hasHistory NOTIFY hasHistoryChanged)
 	Q_PROPERTY(bool saveHistory READ saveHistory WRITE saveHistory NOTIFY dummySignal)
 	Q_PROPERTY(int menuOffset READ menuOffset WRITE menuOffset NOTIFY menuOffsetChanged)
+	Q_PROPERTY(bool debugMode READ debugMode NOTIFY dummySignal)
+	Q_PROPERTY(QString coverImage READ coverImage NOTIFY coverImageChanged)
+	Q_PROPERTY(QString version READ version NOTIFY dummySignal)
 
 private:
     enum ThemeColor
@@ -118,6 +128,18 @@ public:
     Q_INVOKABLE
     void setInputValue(int player, QString button, int value);
     Q_INVOKABLE
+    QString getMogaInputCharacter(int value);
+    Q_INVOKABLE
+    QString getInputCharacter(int value);
+    Q_INVOKABLE
+    void setControllerID(int player, QString value);
+    Q_INVOKABLE
+    QString getControllerID(int player);
+    Q_INVOKABLE
+    int getControllerIndex(int player);
+    Q_INVOKABLE
+    void setControllerIndex(int player, int index);
+    Q_INVOKABLE
     void setMogaInputValue(int player, QString button, int index);
     Q_INVOKABLE
     int getMogaInputValue(int player, QString button);
@@ -160,20 +182,28 @@ signals:
 	void hasHistoryChanged();
 	void invoked(QString url);
 	void menuOffsetChanged();
+	void coverImageChanged();
+	void createOption(QString name, QUrl imageSource);
+	void controllersDetected();
 
 public slots:
 	void addCheatToggle(int);
 	void addCheatDropDown(int);
 	void onManualExit();
+	void onThumbnail();
 	void onBoxArtRecieved(const QString &info, bool success);
+	void onVersionRecieved(const QString &info, bool success);
 	void onInvoke(const bb::system::InvokeRequest& req);
 	void showMenuFinished();
 	void onMenuOffsetChanged();
+	void onCreateOption(QString name, QUrl imageSource);
 	//void emitSendCheat();
 	//void handleSendCheat();
 
-private:
+public:
     inline bool hasKeyboard() const { deviceinfo_details_t* details; deviceinfo_get_details(&details); bool retval = deviceinfo_details_get_keyboard(details) == DEVICEINFO_KEYBOARD_PRESENT; deviceinfo_free_details(&details); return retval; }
+
+private:
     inline bool getBright() const { return m_isbright; }
     inline int colorIndex() const { return m_color == Bright ? 0 : (m_color == Default ? (m_isbright ? 0 : 1) : 1); }
     inline int width() const { bb::device::DisplayInfo info; return info.pixelSize().width(); }
@@ -189,7 +219,10 @@ private:
     inline bool saveHistory() const { return m_settings->value("SAVE_HISTORY", true).toBool(); }
     inline void saveHistory(bool value) { m_settings->setValue("SAVE_HISTORY", value); clearHistory(); }
     inline int menuOffset() const { return m_menuOffset; }
+    inline QString coverImage() const { return m_coverImage; }
     inline void menuOffset(int offset) { m_menuOffset = offset; emit menuOffsetChanged(); }
+    inline QString version() const { return QString("%1.%2.%3").arg(QString::number(VERSION_MAJOR),
+    		QString::number(VERSION_MINOR), QString::number(VERSION_RELEASE)); }
     void run();
     Container *createCheatToggle(sCheatInfo *pCur);
     Container *createCheatDropDown(sCheatInfo *pCur);
@@ -201,9 +234,10 @@ private:
 	QList<Game> getHistory();
 	void setHistory(QList<Game> list);
 	void addToHistory(QString title);
+	bool debugMode();
 
 private:
-    bool mStartEmu;
+    bool m_emuRunning;
     int mVideoPlugin;
     QString mRom;
     QSettings *m_settings;
@@ -211,10 +245,12 @@ private:
     int mAudio;
     Container *mCheatsContainer;
     ImageLoader* m_boxart;
+    bb::cascades::TabbedPane *m_tab;
 	bool m_boxartLoaded;
     bool m_isbright;
     int m_menuOffset;
     ThemeColor m_color;
+    QString m_coverImage;
     bb::device::DisplayInfo *m_hdmiInfo;
     bb::cascades::QMapListDataModel* m_devices;
     bb::cascades::QMapListDataModel* m_history;

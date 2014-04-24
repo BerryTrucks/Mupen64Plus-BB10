@@ -118,6 +118,7 @@ static int load_controller_config(const char *SectionName, int i)
     const char *config_ptr;
     int readOK, j;
 
+	fprintf(stderr, "Openning section: %s\n", SectionName);
     /* Open the configuration section for this controller */
     if (ConfigOpenSection(SectionName, &pConfig) != M64ERR_SUCCESS)
     {
@@ -127,6 +128,7 @@ static int load_controller_config(const char *SectionName, int i)
     /* try to read all of the configuration values */
     for (readOK = 0; readOK == 0; readOK = 1)
     {
+		int err;
         /* check for the required parameters */
         if (ConfigGetParameter(pConfig, "plugged", M64TYPE_BOOL, &controller[i].control->Present, sizeof(int)) != M64ERR_SUCCESS)
             break;
@@ -134,6 +136,12 @@ static int load_controller_config(const char *SectionName, int i)
             break;
         if (ConfigGetParameter(pConfig, "device", M64TYPE_INT, &controller[i].device, sizeof(int)) != M64ERR_SUCCESS)
             break;
+		if ((err = ConfigGetParameter(pConfig, "gamepadid", M64TYPE_STRING, gamepadId[i], 256)) != M64ERR_SUCCESS)
+		{
+			memset(gamepadId[i], 0, 256);
+			fprintf(stderr, "Controller error: %d\n", err);
+		}
+		fprintf(stderr, "Controller (%d) ids for player %d: %s\n", controller[i].device, i, gamepadId[i]);
         /* then do the optional parameters */
         ConfigGetParameter(pConfig, "mouse", M64TYPE_BOOL, &controller[i].mouse, sizeof(int));
         if (ConfigGetParameter(pConfig, "AnalogDeadzone", M64TYPE_STRING, input_str, 256) == M64ERR_SUCCESS)
@@ -241,6 +249,7 @@ void save_controller_config(int iCtrlIdx)
     ConfigSetDefaultInt(pConfig, "plugin", controller[iCtrlIdx].control->Plugin, "Specifies which type of expansion pak is in the controller: 1=None, 2=Mem pak, 5=Rumble pak");
     ConfigSetDefaultBool(pConfig, "mouse", controller[iCtrlIdx].mouse, "If True, then mouse buttons may be used with this controller");
     ConfigSetDefaultInt(pConfig, "device", controller[iCtrlIdx].device, "Specifies which joystick is bound to this controller: -2=Keyboard/mouse, -1=Auto config, 0 or more= SDL Joystick number");
+    ConfigSetDefaultString(pConfig, "gamepadid", gamepadId[iCtrlIdx], "The ID of the gamepad used for this controller.");
 
     sprintf(Param, "%i,%i", controller[iCtrlIdx].axis_deadzone[0], controller[iCtrlIdx].axis_deadzone[1]);
     ConfigSetDefaultString(pConfig, "AnalogDeadzone", Param, "The minimum absolute value of the SDL analog joystick axis to move the N64 controller axis value from 0.  For X, Y axes.");
@@ -420,7 +429,7 @@ void load_configuration(int bPrintSummary)
     joy_found = 0, joy_plugged = 0;
     for (i = 0; i < 4; i++)
     {
-        if (controller[i].device >= 0 || controller[i].device == DEVICE_NOT_JOYSTICK || controller[i].device == -3)
+        if (controller[i].device >= 0 || controller[i].device == DEVICE_NOT_JOYSTICK || controller[i].device == -3 || controller[i].device == -4)
         {
             joy_found++;
             if (controller[i].control->Present)

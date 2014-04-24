@@ -14,15 +14,22 @@
  */
 
 #include "frontend.h"
+#include "Cover/sceneCover.hpp"
 
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <unistd.h>
+
+#include <bps/navigator.h>
 
 #include <bb/system/InvokeManager>
 
 using ::bb::cascades::Application;
 using namespace bb::system;
+
+bool debug_mode = false;
+ActiveFrame* sceneCover;
 
 Q_DECL_EXPORT int main(int argc, char **argv)
 {
@@ -42,14 +49,27 @@ Q_DECL_EXPORT int main(int argc, char **argv)
     // Call the main application constructor.
     Application app(argc, argv);
 
+    FILE* fl = 0;
+    if (debug_mode)
+    {
+    	fl = freopen("/accounts/1000/shared/misc/n64/debug.txt", "w", stderr);
+    	dup2(fileno(stderr), fileno(stdout));
+    	setvbuf(stdout, NULL, _IONBF, 0);
+    }
+
+	mkdir("data/screens/", S_IRWXU | S_IRWXG);
+
     InvokeManager* manager = new InvokeManager();
 
     // Create the application.
     Frontend mainApp(theme);
+    sceneCover = new ActiveFrame(&mainApp);
+    app.setCover(sceneCover);
 
     //app.setAutoExit(false);
 
     QObject::connect(&app, SIGNAL( aboutToQuit() ), &mainApp, SLOT( onManualExit() ));
+    QObject::connect(&app, SIGNAL( thumbnail() ), &mainApp, SLOT( onThumbnail() ));
 	QObject::connect(manager, SIGNAL(invoked(const bb::system::InvokeRequest&)), &mainApp, SLOT(onInvoke(const bb::system::InvokeRequest&)));
 
     // We complete the transaction started in the App constructor and start the client event loop here.
@@ -57,6 +77,9 @@ Q_DECL_EXPORT int main(int argc, char **argv)
     rc = Application::exec();
 
     printf("After main exec...\n");fflush(stdout);
+
+    if (debug_mode && fl)
+    	fclose(stderr);
 
     //delete mainApp;
 

@@ -132,16 +132,26 @@ get_window_group_id()
     return s_window_group_id;
 }
 
+void bbutil_defocus()
+{
+	int z = 1;
+	screen_set_window_property_iv(screen_win, SCREEN_PROPERTY_ZORDER, &z);
+}
+
 static int menuOpen = 0;
 
 int bbutil_offset_menu(int offset)
 {
 	int pos[2] = { 0, offset };
 	screen_set_window_property_iv(screen_win, SCREEN_PROPERTY_POSITION, pos);
-	if (offset > 0)
+	if (offset > 0) {
 		menuOpen = 1;
-	else
+		bbutil_defocus();
+	}
+	else {
 		menuOpen = 0;
+		bbutil_focus();
+	}
 	return 0;
 }
 
@@ -150,12 +160,19 @@ int bbutil_close_menu()
 	int pos[2] = { 0, 0 };
 	screen_set_window_property_iv(screen_win, SCREEN_PROPERTY_POSITION, pos);
 	menuOpen = 0;
+	bbutil_focus();
 	return 0;
 }
 
 int bbutil_is_menu_open()
 {
 	return menuOpen;
+}
+
+void bbutil_focus()
+{
+	int z = 10;
+	screen_set_window_property_iv(screen_win, SCREEN_PROPERTY_ZORDER, &z);
 }
 
 int
@@ -240,6 +257,7 @@ bbutil_init_egl(screen_context_t ctx, char *groupId, char *windowId) {
     }
 
     rc = screen_create_window_type(&screen_win, screen_cxt, SCREEN_CHILD_WINDOW);
+    //rc = screen_create_window(&screen_win, screen_cxt);
     if (rc) {
         perror("screen_create_window");
         bbutil_terminate();
@@ -272,6 +290,11 @@ bbutil_init_egl(screen_context_t ctx, char *groupId, char *windowId) {
 		bbutil_terminate();
 		return EXIT_FAILURE;
     }
+    /*if (screen_create_window_group(screen_win, "gamewindowgroup") != 0) {
+    	perror("screen_create_window_group");
+    	bbutil_terminate();
+    	return EXIT_FAILURE;
+    }*/
 
     rc = screen_set_window_property_iv(screen_win, SCREEN_PROPERTY_FORMAT, &format);
     if (rc) {
@@ -361,7 +384,7 @@ bbutil_init_egl(screen_context_t ctx, char *groupId, char *windowId) {
         return EXIT_FAILURE;
     }
 
-    int z = 10;
+    int z = 1;
 	if (screen_set_window_property_iv(screen_win, SCREEN_PROPERTY_ZORDER, &z) != 0) {
 		return EXIT_FAILURE;
 	}
@@ -405,7 +428,7 @@ bbutil_init_egl(screen_context_t ctx, char *groupId, char *windowId) {
 	screen_set_window_property_iv(screen_win, SCREEN_PROPERTY_VISIBLE, &vis);
 
 	int idleMode = SCREEN_IDLE_MODE_KEEP_AWAKE;
-	screen_set_window_property_iv( screen_win, SCREEN_PROPERTY_IDLE_MODE, &idleMode);
+	screen_set_window_property_iv(screen_win, SCREEN_PROPERTY_IDLE_MODE, &idleMode);
 
     initialized = 1;
 
@@ -1452,4 +1475,106 @@ void set_z_order(int z){
 	if (screen_set_window_property_iv(screen_win, SCREEN_PROPERTY_ZORDER, &zOrder) != 0) {
 		return;
 	}
+}
+
+void write_bitmap_header(int nbytes, int fd, int width, int height)
+{
+	char header[54];
+	header[0] = 'B';
+	header[1] = 'M';
+	header[2] = nbytes & 0xff;
+	header[3] = (nbytes >> 8) & 0xff;
+	header[4] = (nbytes >> 16) & 0xff;
+	header[5] = (nbytes >> 24) & 0xff;
+	header[6] = 0;
+	header[7] = 0;
+	header[8] = 0;
+	header[9] = 0;
+	header[10] = 54;
+	header[11] = 0;
+	header[12] = 0;
+	header[13] = 0;
+	header[14] = 40;
+	header[15] = 0;
+	header[16] = 0;
+	header[17] = 0;
+	header[18] = width & 0xff;
+	header[19] = (width >> 8) & 0xff;
+	header[20] = (width >> 16) & 0xff;
+	header[21] = (width >> 24) & 0xff;
+	header[22] = -height & 0xff;
+	header[23] = (-height >> 8) & 0xff;
+	header[24] = (-height >> 16) & 0xff;
+	header[25] = (-height >> 24) & 0xff;
+	header[26] = 1;
+	header[27] = 0;
+	header[28] = 32;
+	header[29] = 0;
+	header[30] = 0;
+	header[31] = 0;
+	header[32] = 0;
+	header[33] = 0;
+	header[34] = 0; /* image size*/
+	header[35] = 0;
+	header[36] = 0;
+	header[37] = 0;
+	header[38] = 0x9;
+	header[39] = 0x88;
+	header[40] = 0;
+	header[41] = 0;
+	header[42] = 0x9l;
+	header[43] = 0x88;
+	header[44] = 0;
+	header[45] = 0;
+	header[46] = 0;
+	header[47] = 0;
+	header[48] = 0;
+	header[49] = 0;
+	header[50] = 0;
+	header[51] = 0;
+	header[52] = 0;
+	header[53] = 0;
+
+	/* Write bitmap header to file */
+	write(fd, header, sizeof(header));
+}
+
+extern int creat(const char*, mode_t);
+
+void write_bitmap_file(const char* filename, int width, int height, const char* screenshot_ptr, const int screenshot_stride)
+{
+	int nbytes;
+	int fd;
+	int i;
+	nbytes = width * height * 4;
+	fd = creat(filename, S_IRUSR | S_IWUSR);
+	write_bitmap_header(nbytes, fd, width, height);
+	for (i = 0; i < height; i++)
+		write(fd, screenshot_ptr + i * screenshot_stride, width * 4);
+}
+
+int bbutil_screencapture(const char* filename, int x, int y, int width, int height)
+{
+	screen_pixmap_t screen_pix;
+	screen_buffer_t screenshot_buf;
+
+	char *screenshot_ptr = 0;
+	int screenshot_stride = 0;
+	int usage, format;
+	screen_create_pixmap(&screen_pix, screen_cxt);
+	usage = SCREEN_USAGE_READ | SCREEN_USAGE_NATIVE;
+	screen_set_pixmap_property_iv(screen_pix, SCREEN_PROPERTY_USAGE, &usage);
+	format = SCREEN_FORMAT_RGBA8888;
+	screen_set_pixmap_property_iv(screen_pix, SCREEN_PROPERTY_FORMAT, &format);
+	int size[2];
+	screen_get_window_property_iv(screen_win, SCREEN_PROPERTY_SIZE, size);
+	screen_set_pixmap_property_iv(screen_pix, SCREEN_PROPERTY_BUFFER_SIZE, size);
+	screen_create_pixmap_buffer(screen_pix);
+	screen_get_pixmap_property_pv(screen_pix, SCREEN_PROPERTY_RENDER_BUFFERS, (void**)&screenshot_buf);
+	screen_get_buffer_property_pv(screenshot_buf, SCREEN_PROPERTY_POINTER, (void**)&screenshot_ptr);
+	screen_get_buffer_property_iv(screenshot_buf, SCREEN_PROPERTY_STRIDE, &screenshot_stride);
+	screen_read_window(screen_win, screenshot_buf, 0, NULL, 0);
+	screenshot_ptr += x * 4;
+	write_bitmap_file(filename, width, height, screenshot_ptr, screenshot_stride);
+	return 0;
 }

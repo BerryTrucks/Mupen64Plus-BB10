@@ -3,6 +3,8 @@
 	<name>Mupen64Plus-cascades-ui</name>
 	<comment></comment>
 	<projects>
+		<project>bbutil</project>
+		<project>Unzip</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>

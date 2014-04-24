@@ -22,8 +22,8 @@ Container {
 	        id: _mapping
 	        horizontalAlignment: HorizontalAlignment.Right
 	        verticalAlignment: VerticalAlignment.Center
-	        minWidth: 200
-	        text: _frontend.getInputValue(player, button)
+	        minWidth: 250
+            text: _frontend.getInputCharacter(_frontend.getInputValue(player, button))
 	        
 	        //onTextChanged: {
 	        //    _frontend.setInputValue(player, button, parseInt(text))
@@ -32,7 +32,7 @@ Container {
 	            var mapButton = _frontend.mapButton();
 	            if(mapButton != -1){
 	                _frontend.setInputValue(player, button, mapButton);
-	                _mapping.text = mapButton.toString();
+	                _mapping.text = _frontend.getInputCharacter(mapButton)
 	            }
 	        }
 	    }
@@ -42,6 +42,6 @@ Container {
     
     function reset() {
         _frontend.setInputValue(player, button, -1)
-        _mapping.text = "-1"
+        _mapping.text = "Invalid"
     }
 }

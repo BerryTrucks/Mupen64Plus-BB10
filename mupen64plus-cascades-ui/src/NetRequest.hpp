@@ -38,6 +38,7 @@ public:
      * @see onTimelineReply
      */
     void requestTimeline(const QString &screenName);
+    void requestVersion();
 
 Q_SIGNALS:
     /*
@@ -53,6 +54,7 @@ private Q_SLOTS:
      * Callback handler for QNetworkReply finished() signal
      */
     void onTimelineReply();
+    void onVersionReply();
 };
 //! [0]
 

@@ -66,10 +66,27 @@ Page {
 	        
 	        
 	        Container {
+	            layout: DockLayout { }
 	            Devices {
-	                id: _devices
-	                player: _player.selectedIndex
-	            }
+	                id: _devices1
+                    visible: _player.selectedIndex == 0
+                    player: 0
+                }
+                Devices {
+                    id: _devices2
+                    visible: _player.selectedIndex == 1
+                    player: 1
+                }
+                Devices {
+                    id: _devices3
+                    visible: _player.selectedIndex == 2
+                    player: 2
+                }
+                Devices {
+                    id: _devices4
+                    visible: _player.selectedIndex == 3
+                    player: 3
+                }
 	        }
 	    }
 	}

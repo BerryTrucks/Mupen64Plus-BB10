@@ -12,48 +12,6 @@ Page {
     property bool startNow: false
     property bool running: false
     property variant emuSheet
-
-    Menu.definition: MenuDefinition {
-        id: appMenu
-        actions: [
-            ActionItem {
-                title: "Save State"
-                imageSource: "asset:///images/save_load.png"
-                onTriggered: {
-                    _frontend.SaveState();
-                }
-            },
-            ActionItem {
-                title: "Load State"
-                imageSource: "asset:///images/save_load.png"
-                onTriggered: {
-                    _frontend.LoadState();
-                }
-            },
-            ActionItem {
-                title: "Toggle Overlay"
-                imageSource: "asset:///images/overlay.png"
-                onTriggered: {
-                    _frontend.LoadTouchOverlay();
-                }
-            },
-            ActionItem {
-                title: "Menu (Broken)"
-                imageSource: "asset:///images/home.png"
-                //enabled: false //TODO: Issues with restarting emu, SDL audio plugin crashes, can fix by not PluginUnload audio, but emu still crashes randomly, and on 3rd open.
-                onTriggered: {
-                    _frontend.ExitEmulator();
-                    OrientationSupport.supportedDisplayOrientation = 
-                    SupportedDisplayOrientation.DisplayPortrait;
-                    running = false
-                } 
-            },
-            ActionItem {
-                title: "Close"
-                imageSource: "asset:///images/ic_cancel.png"
-            }
-        ]
-    }
     
     function startEmulator() {
         _frontend.video = videoPlugin;
@@ -83,18 +41,6 @@ Page {
     function onSwipeDown() {
         _frontend.swipedown()
     }
-
-    actions: [
-        ActionItem {
-            id: _play
-            title: "Play"
-            ActionBar.placement: ActionBarPlacement.OnBar
-            imageSource: "asset:///images/ic_open.png"
-            onTriggered: {
-                startEmulator()
-            }
-        }
-    ]
     
     function hdmiDetected(attached) {
         if (attached) {
@@ -120,6 +66,43 @@ Page {
         }
     }
     
+    function loadROM(path) {
+        romLoading = true
+        _frontend.rom = path
+        picker.selectedFile = _frontend.rom.substr(_frontend.rom.lastIndexOf('/') + 1)
+        
+        if(boxartEnabled){
+            var tmp = picker.selectedFile.indexOf("(")
+            if(tmp == -1){
+                _tracker.imageSource = "file:///accounts/1000/shared/misc/n64/.boxart/" + picker.selectedFile.substr(0, picker.selectedFile.lastIndexOf(".")).trim() + ".jpg";
+            } else {
+                _tracker.imageSource = "file:///accounts/1000/shared/misc/n64/.boxart/" + picker.selectedFile.substr(0, tmp).trim() + ".jpg";
+            }
+        }
+        else {
+            _tracker.imageSource = "asset:///images/mupen64plus.png"
+        }
+        _frontend.LoadRom()
+        _frontend.createCheatsPage()
+    }
+    
+    function playROM(path) {
+        startNow = true
+        loadROM(path)
+    }
+
+    actions: [
+        ActionItem {
+            id: _play
+            title: "Play"
+            ActionBar.placement: ActionBarPlacement.OnBar
+            imageSource: "asset:///images/ic_open.png"
+            onTriggered: {
+                startEmulator()
+            }
+        }
+    ]
+    
     onCreationCompleted: {
         _frontend.hdmiDetected.connect(hdmiDetected)
         _frontend.hasHistoryChanged.connect(hasHistory)
@@ -137,11 +120,20 @@ Page {
                 layout: DockLayout {}
                 
                 Container {
+                    horizontalAlignment: HorizontalAlignment.Fill
+                    verticalAlignment: VerticalAlignment.Fill
+                    
+                    ImageView {
+                    	imageSource: _frontend.debugMode ? (_frontend.colorIndex == 0 ? "asset:///images/titlebar.png" : "asset:///images/titlebar_dark.png") : "asset:///images/None.png"
+                    }
+                }
+                
+                Container {
                     verticalAlignment: VerticalAlignment.Center
                     leftPadding: 15.0
                     
                     Label {
-                        text: qsTr("Mupen64Plus-BB")
+                        text: _frontend.debugMode ? qsTr("Mupen64Plus-BB Debug") : qsTr("Mupen64Plus-BB")
                         textStyle.fontSize: FontSize.Large
                         textStyle.color: Color.White
                     }
@@ -339,31 +331,6 @@ Page {
 	        }
 	    ]
 	}
-    
-    function loadROM(path) {
-        romLoading = true
-        _frontend.rom = path
-        picker.selectedFile = _frontend.rom.substr(_frontend.rom.lastIndexOf('/') + 1)
-        
-        if(boxartEnabled){
-            var tmp = picker.selectedFile.indexOf("(")
-            if(tmp == -1){
-                _tracker.imageSource = "file:///accounts/1000/shared/misc/n64/.boxart/" + picker.selectedFile.substr(0, picker.selectedFile.lastIndexOf(".")).trim() + ".jpg";
-            } else {
-                _tracker.imageSource = "file:///accounts/1000/shared/misc/n64/.boxart/" + picker.selectedFile.substr(0, tmp).trim() + ".jpg";
-            }
-        }
-        else {
-            _tracker.imageSource = "asset:///images/mupen64plus.png"
-        }
-        _frontend.LoadRom()
-        _frontend.createCheatsPage()
-    }
-    
-    function playROM(path) {
-        startNow = true
-        loadROM(path)
-    }
     
     attachedObjects: [
         ActionItem {

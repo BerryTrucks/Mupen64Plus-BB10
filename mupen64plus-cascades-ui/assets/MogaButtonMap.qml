@@ -1,107 +1,47 @@
 import bb.cascades 1.0
 
 Container {
-    property string button: "Undefined"
-
-    horizontalAlignment: HorizontalAlignment.Fill
+    property alias button: _button.text
+    
+    bottomPadding: 20
+    
     Container {
-        layout: DockLayout {
+        
+        layout: StackLayout {
+            orientation: LayoutOrientation.LeftToRight
         }
-
-        horizontalAlignment: HorizontalAlignment.Fill
+        
         Label {
+            horizontalAlignment: HorizontalAlignment.Left
             verticalAlignment: VerticalAlignment.Center
-            text: button
+            preferredWidth: 768
+            id: _button
         }
-        DropDown {
+        
+        Button {
+            id: _mapping
             horizontalAlignment: HorizontalAlignment.Right
             verticalAlignment: VerticalAlignment.Center
-            maxWidth: 400.0
-            Option {
-                text: "None"
-                selected: true
-            }
-            Option {
-                text: "A"
-            }
-            Option {
-                text: "B"
-            }
-            /*Option {
-                text: "4"
-            }*/
-            Option {
-                text: "R3"
-                description: "Right Analog Click"
-            }
-            Option {
-                text: "X"
-            }
-            /*Option {
-                text: "32"
-            }*/
-            Option {
-                text: "Select"
-            }
-            Option {
-                text: "Start"
-            }
-            /*Option {
-                text: "256"
-            }
-            Option {
-                text: "512"
-            }*/
-            Option {
-                text: "L1"
-                description: "Left Bumper"
-            }
-            Option {
-                text: "L2"
-                description: "Left Trigger"
-            }
-            Option {
-                text: "L3"
-                description: "Left Analog Click"
-            }
-            Option {
-                text: "R1"
-                description: "Right Bumper"
-            }
-            Option {
-                text: "R2"
-                description: "Right Trigger"
-            }
-            Option {
-                text: "Y"
-            }
-            Option {
-                text: "D-Pad Up"
-            }
-            Option {
-                text: "D-Pad Down"
-            }
-            Option {
-                text: "D-Pad Left"
-            }
-            Option {
-                text: "D-Pad Right"
-            }
+            minWidth: 250
+            text: _frontend.getMogaInputCharacter(_frontend.getInputValue(player, button))
             
-            onCreationCompleted: {
-                selectedIndex = _frontend.getMogaInputValue(player, button)
-                selectedIndexChanged.connect(indexChanged)
-            }
-            
-            function indexChanged(index) {
-                _frontend.setMogaInputValue(player, button, index)
+            //onTextChanged: {
+            //    _frontend.setInputValue(player, button, parseInt(text))
+            //}
+            onClicked: {
+                var mapButton = _frontend.mapButton();
+                if(mapButton != -1){
+                    _frontend.setInputValue(player, button, mapButton);
+                    _mapping.text = _frontend.getMogaInputCharacter(mapButton)
+                }
             }
         }
     }
-    Divider {
-    }
-
+    
+    Divider {}
+    
     function reset() {
-        _frontend.setMogaInputValue(player, button, 0)
+        _frontend.setInputValue(player, button, -1)
+        _mapping.text = "Invalid"
     }
 }

@@ -9,15 +9,11 @@ static SDLKey *Playbook_specialsyms;
 
 unsigned int inputButtons[4][16];
 
-typedef struct {
-	int x, y;
-}InputStick;
-
 InputStick inputStick[4];
 
 //TODO: remove SDL
 //TODO: add https://github.com/blackberry/NDK-Samples/tree/master/Gamepad
-void ProcessKeyboardEvent(screen_event_t *event,SController* controller,unsigned short* button_bits){
+void ProcessKeyboardEvent(screen_event_t *event,SController* controller,unsigned short* button_bits) {
 	static const int KEYBOARD_TYPE_MASK = 0x20;
 	int sym = 0;
 	screen_get_event_property_iv(*event, SCREEN_PROPERTY_KEY_SYM, &sym);
@@ -29,7 +25,7 @@ void ProcessKeyboardEvent(screen_event_t *event,SController* controller,unsigned
 	screen_get_event_property_iv(*event, SCREEN_PROPERTY_KEY_SCAN, &scan);
 	int cap = 0;
 	screen_get_event_property_iv(*event, SCREEN_PROPERTY_KEY_CAP, &cap);
-
+	
 	SDL_keysym keysym;
 	if ((flags & KEYBOARD_TYPE_MASK)) {
 		if (!TranslateBluetoothKeyboard(sym, modifiers, flags, scan, cap, &keysym))

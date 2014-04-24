@@ -3,7 +3,8 @@ BASEDIR =  $$quote($$_PRO_FILE_PWD_)
 
 device {
     CONFIG(debug, debug|release) {
-        SOURCES +=  $$quote($$BASEDIR/src/History/Game.cpp) \
+        SOURCES +=  $$quote($$BASEDIR/src/Cover/sceneCover.cpp) \
+                 $$quote($$BASEDIR/src/History/Game.cpp) \
                  $$quote($$BASEDIR/src/NetRequest.cpp) \
                  $$quote($$BASEDIR/src/cheat.cpp) \
                  $$quote($$BASEDIR/src/compare_core.cpp) \
@@ -17,7 +18,8 @@ device {
                  $$quote($$BASEDIR/src/osal_files_unix.cpp) \
                  $$quote($$BASEDIR/src/plugin.cpp)
 
-        HEADERS +=  $$quote($$BASEDIR/src/History/Game.hpp) \
+        HEADERS +=  $$quote($$BASEDIR/src/Cover/sceneCover.hpp) \
+                 $$quote($$BASEDIR/src/History/Game.hpp) \
                  $$quote($$BASEDIR/src/NetRequest.hpp) \
                  $$quote($$BASEDIR/src/cheat.h) \
                  $$quote($$BASEDIR/src/compare_core.h) \
@@ -35,7 +37,8 @@ device {
     }
 
     CONFIG(release, debug|release) {
-        SOURCES +=  $$quote($$BASEDIR/src/History/Game.cpp) \
+        SOURCES +=  $$quote($$BASEDIR/src/Cover/sceneCover.cpp) \
+                 $$quote($$BASEDIR/src/History/Game.cpp) \
                  $$quote($$BASEDIR/src/NetRequest.cpp) \
                  $$quote($$BASEDIR/src/cheat.cpp) \
                  $$quote($$BASEDIR/src/compare_core.cpp) \
@@ -49,7 +52,8 @@ device {
                  $$quote($$BASEDIR/src/osal_files_unix.cpp) \
                  $$quote($$BASEDIR/src/plugin.cpp)
 
-        HEADERS +=  $$quote($$BASEDIR/src/History/Game.hpp) \
+        HEADERS +=  $$quote($$BASEDIR/src/Cover/sceneCover.hpp) \
+                 $$quote($$BASEDIR/src/History/Game.hpp) \
                  $$quote($$BASEDIR/src/NetRequest.hpp) \
                  $$quote($$BASEDIR/src/cheat.h) \
                  $$quote($$BASEDIR/src/compare_core.h) \
@@ -69,7 +73,8 @@ device {
 
 simulator {
     CONFIG(debug, debug|release) {
-        SOURCES +=  $$quote($$BASEDIR/src/History/Game.cpp) \
+        SOURCES +=  $$quote($$BASEDIR/src/Cover/sceneCover.cpp) \
+                 $$quote($$BASEDIR/src/History/Game.cpp) \
                  $$quote($$BASEDIR/src/NetRequest.cpp) \
                  $$quote($$BASEDIR/src/cheat.cpp) \
                  $$quote($$BASEDIR/src/compare_core.cpp) \
@@ -83,7 +88,8 @@ simulator {
                  $$quote($$BASEDIR/src/osal_files_unix.cpp) \
                  $$quote($$BASEDIR/src/plugin.cpp)
 
-        HEADERS +=  $$quote($$BASEDIR/src/History/Game.hpp) \
+        HEADERS +=  $$quote($$BASEDIR/src/Cover/sceneCover.hpp) \
+                 $$quote($$BASEDIR/src/History/Game.hpp) \
                  $$quote($$BASEDIR/src/NetRequest.hpp) \
                  $$quote($$BASEDIR/src/cheat.h) \
                  $$quote($$BASEDIR/src/compare_core.h) \
@@ -102,7 +108,8 @@ simulator {
 }
 
 INCLUDEPATH +=  $$quote($$BASEDIR/src/History) \
-         $$quote($$BASEDIR/src)
+         $$quote($$BASEDIR/src) \
+         $$quote($$BASEDIR/src/Cover)
 
 CONFIG += precompile_header
 
@@ -114,6 +121,11 @@ lupdate_inclusion {
              $$quote($$BASEDIR/../src/*.cc) \
              $$quote($$BASEDIR/../src/*.cpp) \
              $$quote($$BASEDIR/../src/*.cxx) \
+             $$quote($$BASEDIR/../src/Cover/*.c) \
+             $$quote($$BASEDIR/../src/Cover/*.c++) \
+             $$quote($$BASEDIR/../src/Cover/*.cc) \
+             $$quote($$BASEDIR/../src/Cover/*.cpp) \
+             $$quote($$BASEDIR/../src/Cover/*.cxx) \
              $$quote($$BASEDIR/../src/History/*.c) \
              $$quote($$BASEDIR/../src/History/*.c++) \
              $$quote($$BASEDIR/../src/History/*.cc) \
@@ -122,6 +134,9 @@ lupdate_inclusion {
              $$quote($$BASEDIR/../assets/*.qml) \
              $$quote($$BASEDIR/../assets/*.js) \
              $$quote($$BASEDIR/../assets/*.qs) \
+             $$quote($$BASEDIR/../assets/html/*.qml) \
+             $$quote($$BASEDIR/../assets/html/*.js) \
+             $$quote($$BASEDIR/../assets/html/*.qs) \
              $$quote($$BASEDIR/../assets/images/*.qml) \
              $$quote($$BASEDIR/../assets/images/*.js) \
              $$quote($$BASEDIR/../assets/images/*.qs)

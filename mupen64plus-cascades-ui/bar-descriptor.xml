@@ -35,7 +35,7 @@
     <!-- A string value of the format <0-999>.<0-999>.<0-999> that represents application version which can be used to check for application upgrade.
          Values can also be 1-part or 2-part. It is not necessary to have a 3-part value.
          An updated version of application must have a versionNumber value higher than the previous version. Required. -->
-    <versionNumber>1.1.1</versionNumber>
+    <versionNumber>1.1.3</versionNumber>
 
     <!-- Fourth digit segment of the package version. First three segments are taken from the
          <versionNumber> element.  Must be an integer from 0 to 2^16-1 -->
@@ -121,11 +121,13 @@
     <asset path="lib/mupen64plus-audio-sdl.so" type="Qnx/Elf">lib/mupen64plus-audio-sdl.so</asset>
     <asset path="lib/rsp-no-sound.so" type="Qnx/Elf">lib/rsp-no-sound.so</asset>
     <asset path="data/InputAutoCfg.ini">InputAutoCfg.ini</asset>
-    <asset path="data/mupen64plus.cfg">mupen64plus.cfg</asset>
+    <asset path="data/mupen64plus.cfg">mupen64plus.cfg.2</asset>
     <asset path="data/mupen64plus.cht">mupen64plus.cht</asset>
     <asset path="data/mupen64plus.ini">mupen64plus.ini</asset>
     <asset path="data/mupencheat.txt">mupencheat.txt</asset>
     <asset path="data/RiceVideoLinux.ini">RiceVideoLinux.ini</asset>
+    <asset path="lib/mupen64plus-video-glide64mk2.so" type="Qnx/Elf">lib/mupen64plus-video-glide64mk2.so</asset>
+    <asset path="data/Glide64mk2.ini">Glide64mk2.ini</asset>
 
     <!-- Request permission to execute native code.  Required for native applications. -->
     <permission system="true">run_native</permission>

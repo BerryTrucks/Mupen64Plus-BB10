@@ -17,8 +17,8 @@
 #include "NetRequest.hpp"
 
 #include <QNetworkAccessManager>
-#include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QNetworkReply>
 #include <QUrl>
 #include <QDebug>
 
@@ -66,6 +66,18 @@ void TwitterRequest::requestTimeline(const QString &romName)
 }
 //! [0]
 
+void TwitterRequest::requestVersion()
+{
+    QNetworkAccessManager* networkAccessManager = new QNetworkAccessManager(this);
+    QString queryUri = QString::fromLatin1("https://raw.githubusercontent.com/tredpath/Mupen64Plus-BB10/master/mupen64plus-cascades-ui/VERSION");
+
+    QNetworkRequest request(queryUri);
+
+    QNetworkReply* reply = networkAccessManager->get(request);
+
+    connect(reply, SIGNAL(finished()), this, SLOT(onVersionReply()));
+}
+
 /*
  * TwitterRequest::onTimelineReply()
  *
@@ -101,3 +113,33 @@ void TwitterRequest::onTimelineReply()
     emit complete(response, success);
 }
 //! [1]
+
+void TwitterRequest::onVersionReply()
+{
+    QNetworkReply* reply = qobject_cast<QNetworkReply*>(sender());
+
+    QString response;
+    bool success = false;
+    if (reply) {
+        if (reply->error() == QNetworkReply::NoError) {
+            const int available = reply->bytesAvailable();
+            if (available > 0) {
+                const QByteArray buffer = reply->readAll();
+                response = QString::fromUtf8(buffer);
+                qDebug() << "RESPONSE: " << response;
+                success = true;
+            }
+        } else {
+            response =  tr("Error: %1 status: %2").arg(reply->errorString(), reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toString());
+        }
+
+        reply->deleteLater();
+    }
+
+    if (response.trimmed().isEmpty()) {
+        response = tr("Twitter request failed. Check internet connection");
+        success = false;
+    }
+
+    emit complete(response, success);
+}

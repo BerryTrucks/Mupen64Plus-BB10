@@ -32,6 +32,7 @@
 #include <bb/cascades/Theme>
 #include <bb/cascades/ColorTheme>
 #include <bb/cascades/VisualStyle>
+#include <bb/cascades/Option>
 #include <QSettings>
 #include <bb/cascades/Window>
 #include <bb/cascades/pickers/FilePicker>
@@ -46,6 +47,7 @@
 #include <bps/bps.h>
 #include <bps/screen.h>
 #include <bps/event.h>
+#include <sys/keycodes.h>
 
 #include "main.h"
 #include "bbutil.h"
@@ -68,6 +70,67 @@ Emulator *m64p;
 QString CheatList = "";
 
 int chid = -1, coid = -1;
+
+extern bool debug_mode;
+
+enum GamePadButton{
+   A_BUTTON=0,
+   B_BUTTON,
+   C_BUTTON,
+   X_BUTTON,
+   Y_BUTTON,
+   Z_BUTTON,
+   MENU1_BUTTON,
+   MENU2_BUTTON,
+   MENU3_BUTTON,
+   MENU4_BUTTON,
+   L1_BUTTON,
+   L2_BUTTON,
+   L3_BUTTON,
+   R1_BUTTON,
+   R2_BUTTON,
+   R3_BUTTON,
+   DPAD_UP_BUTTON,
+   DPAD_DOWN_BUTTON,
+   DPAD_LEFT_BUTTON,
+   DPAD_RIGHT_BUTTON,
+   NO_BUTTON,
+   EXT_BUTTON_L4,
+   EXT_BUTTON_R4
+ };
+
+struct GameController {
+  // Static device info.
+  screen_device_t handle;
+  int type;
+  int analogCount;
+  int buttonCount;
+  char id[64];
+  char name[64];
+
+  // Current state.
+  int buttons;
+  int analog0[3];
+  int analog1[3];
+
+  // Text to display to the user about this controller.
+  char deviceString[256];
+ };
+
+GameController _controllers[4];
+
+void initController(GameController* controller, int player)
+{
+    // Initialize controller values.
+    controller->handle = 0;
+    controller->type = 0;
+    controller->analogCount = 0;
+    controller->buttonCount = 0;
+    controller->buttons = 0;
+    controller->analog0[0] = controller->analog0[1] = controller->analog0[2] = 0;
+    controller->analog1[0] = controller->analog1[1] = controller->analog1[2] = 0;
+    sprintf(controller->deviceString, "Player %d: No device detected.", player + 1);
+}
 
 void Frontend::create_button_mapper() {
 	const int usage2 = SCREEN_USAGE_NATIVE | SCREEN_USAGE_WRITE | SCREEN_USAGE_READ;
@@ -189,7 +252,7 @@ Frontend::Frontend(int theme)
 
 	//Set up a
 	m_hdmiInfo = NULL;
-	mStartEmu = false;
+	m_emuRunning = false;
 	m_boxart = 0;
 	mVideoPlugin = 0;
 	m_boxartLoaded = false;
@@ -201,7 +264,7 @@ Frontend::Frontend(int theme)
 	m_menuAnimation = new QPropertyAnimation(this, "menuOffset");
 	m_animationLock = new QMutex();
 	m_menuAnimation->setDuration(250);
-	Application::instance()->setMenuEnabled(false);
+	m_coverImage = "asset:///images/mupen64plus.png";
 
 	if(access("shared/misc/n64/", F_OK) != 0){
 		mkdir("shared/misc/n64/", S_IRWXU | S_IRWXG);
@@ -212,7 +275,7 @@ Frontend::Frontend(int theme)
 		char buf[8192];
 		size_t size;
 
-		FILE* source = fopen("app/native/mupen64plus.cfg", "rb");
+		FILE* source = fopen("app/native/mupen64plus.cfg.2", "rb");
 		FILE* dest = fopen("shared/misc/n64/data/mupen64plus.cfg", "wb");
 
 		// clean and more secure
@@ -231,6 +294,7 @@ Frontend::Frontend(int theme)
 
 	connect(m_menuAnimation, SIGNAL(finished()), SLOT(showMenuFinished()));
 	connect(this, SIGNAL(menuOffsetChanged()), SLOT(onMenuOffsetChanged()));
+	connect(this, SIGNAL(createOption(QString,QUrl)), SLOT(onCreateOption(QString,QUrl)));
 
 	toast = new SystemToast(this);
 	toastButton = new SystemToast(this);
@@ -248,11 +312,15 @@ Frontend::Frontend(int theme)
     qml->setContextProperty("_frontend", this);
 
     if (!qml->hasErrors()) {
-        TabbedPane *tab = qml->createRootObject<TabbedPane>();
-        if (tab) {
-        	mCheatsContainer = tab->findChild<Container*>("cheats");
+        m_tab = qml->createRootObject<TabbedPane>();
+        if (m_tab) {
+        	mCheatsContainer = m_tab->findChild<Container*>("cheats");
 
-            Application::instance()->setScene(tab);
+            Application::instance()->setScene(m_tab);
+
+        	TwitterRequest* request = new TwitterRequest(this);
+        	connect(request, SIGNAL(complete(QString, bool)), this, SLOT(onVersionRecieved(QString, bool)));
+        	request->requestVersion();
 
             start();
         }
@@ -298,7 +366,19 @@ void Frontend::setBright(int index)
 	}
 }
 
+bool Frontend::debugMode()
+{
+	return debug_mode;
+}
+
 void Frontend::onManualExit(){
+	QDir dir("data/screens/");
+	dir.setNameFilters(QStringList() << "*.*");
+	dir.setFilter(QDir::Files);
+	foreach (QString dirFile, dir.entryList())
+	{
+		dir.remove(dirFile);
+	}
 	printf("OnManualExit!\n");fflush(stdout);
 	int msg = 2;//, ret = 0;
 	MsgSend(coid, &msg, sizeof(msg), NULL, 0);
@@ -321,6 +401,10 @@ void Frontend::run()
 	int sym = -1;
 	bps_event_t *event = NULL;
 
+	initController(&_controllers[0], 0);
+	initController(&_controllers[1], 1);
+	initController(&_controllers[2], 2);
+	initController(&_controllers[3], 3);
 	create_button_mapper();
 	discoverControllers();
 	detectHDMI();
@@ -371,6 +455,52 @@ void Frontend::run()
 							screen_get_event_property_iv(screen_event, SCREEN_PROPERTY_KEY_SYM, &sym);
 							break;
 						}
+						else if (screen_val == SCREEN_EVENT_GAMEPAD || screen_val == SCREEN_EVENT_JOYSTICK)
+						{
+							screen_device_t device;
+							screen_get_event_property_pv(screen_event, SCREEN_PROPERTY_DEVICE, (void**)&device);
+							for (int i = 0; i < 4; i++)
+							{
+								GameController *control = &_controllers[i];
+								if (control->handle == device)
+								{
+									sym = NO_BUTTON;
+									fprintf(stderr, "Testing Gamepad: %s\n", control->id);
+									int err = screen_get_event_property_iv(screen_event, SCREEN_PROPERTY_BUTTONS, &control->buttons);
+									if (err != BPS_SUCCESS)
+										fprintf(stderr, "Error at SCREEN_PROPERTY_BUTTONS: %d\n", err);
+									fprintf(stderr, "Testing Gamepad Button: %d\n", control->buttons);
+									if (control->buttons == 0)
+									{
+										screen_get_event_property_iv(screen_event, SCREEN_PROPERTY_ANALOG0, control->analog0);
+										if (control->analog0[2] == 255)
+										{
+											sym = 1 << EXT_BUTTON_L4;
+										}
+										screen_get_event_property_iv(screen_event, SCREEN_PROPERTY_ANALOG1, control->analog1);
+										if (control->analog1[2] == 255)
+										{
+											sym = 1 << EXT_BUTTON_R4;
+										}
+									}
+									else
+									{
+										for (int j = A_BUTTON; j < NO_BUTTON; j++)
+										{
+											if (control->buttons & (1 << j))
+											{
+												fprintf(stderr, "Gamepad Button: %d\n", j);
+												sym = 1 << j;
+												break;
+											}
+										}
+									}
+								}
+							}
+							if (sym == NO_BUTTON)
+								sym = -1;
+							break;
+						}
 					}
 				}
 			}
@@ -381,8 +511,7 @@ void Frontend::run()
 			}
 			screen_post_window(screen_win_map, screen_buf[0], 1, rect, 0);
 
-			int ret = sym&0xff;
-			MsgReply(rcvid, 0, &ret, sizeof(ret));
+			MsgReply(rcvid, 0, &sym, sizeof(sym));
 		}
 
 		//Cheats
@@ -403,8 +532,12 @@ void Frontend::run()
 
 		if(!mVideoPlugin){
 			m64p->SetConfigParameter(std::string("UI-Console[VideoPlugin]=")+"libmupen64plus-video-rice");
-		} else {
+		}
+		else if (mVideoPlugin == 1) {
 			m64p->SetConfigParameter(std::string("UI-Console[VideoPlugin]=")+"gles2n64");
+		}
+		else {
+			m64p->SetConfigParameter(std::string("UI-Console[VideoPlugin]=")+"mupen64plus-video-glide64mk2");
 		}
 
 		//screen resolution
@@ -417,9 +550,37 @@ void Frontend::run()
 		s2 << emuHeight();
 		m64p->SetConfigParameter(s2.str());
 
+		m_emuRunning = true;
+
 		//m64p->print_controller_config();
 		m64p->Start();
 		//m64p->print_controller_config();
+	}
+}
+
+void Frontend::onThumbnail()
+{
+	if (m_emuRunning)
+	{
+		int width = this->width();
+		int height = this->height();
+		if (height > width) {
+			int temp = height;
+			height = width;
+			width = temp;
+		}
+		int x = 0;
+		if (width != height)
+			x = (int)(((double)(width - height)) / 2.0);
+		QDateTime dt = QDateTime::currentDateTime();
+		m_coverImage = "data/screens/screen" + dt.toString("ddMMyyyy_hhmmss") + ".bmp";
+		bbutil_screencapture(m_coverImage.toAscii().data(), x, 0, height, height);
+		QFile fl(m_coverImage);
+		QFileInfo info(fl);
+		m_coverImage = info.absoluteFilePath();
+		if (!m_coverImage.startsWith("file://"))
+			m_coverImage = "file://" + m_coverImage;
+		emit coverImageChanged();
 	}
 }
 
@@ -830,7 +991,7 @@ void Frontend::createCheatsPage(){
 int Frontend::getInputValue(int player, QString value){
 	int i;
 
-	if(value == "present"){
+	if(value == "present") {
 		return m64p->controller[player].present;
 	}
 	if(value == "device") {
@@ -839,23 +1000,258 @@ int Frontend::getInputValue(int player, QString value){
 	if(value == "layout") {
 		return m64p->controller[player].layout;
 	}
+	if (value == "controller") {
+	}
 
-	for(i=0; i<16; ++i){
-		if(button_names[i] == value){
+	for(i = 0; i < 16; ++i) {
+		if(button_names[i] == value) {
 			return m64p->controller[player].button[i];
 		}
 	}
 
-	if(value == "X Axis Left"){
+	if(value == "X Axis Left") {
 		return m64p->controller[player].axis[0].a;
-	} else if (value == "X Axis Right"){
+	} else if (value == "X Axis Right") {
 		return m64p->controller[player].axis[0].b;
-	} else if (value == "Y Axis Up"){
+	} else if (value == "Y Axis Up") {
 		return m64p->controller[player].axis[1].a;
-	} else if (value == "Y Axis Down"){
+	} else if (value == "Y Axis Down") {
 		return m64p->controller[player].axis[1].b;
 	}
 	return -1;
+}
+
+QString Frontend::getMogaInputCharacter(int value)
+{
+	switch (value) {
+	case 1 << A_BUTTON:
+		return "A";
+	case 1 << B_BUTTON:
+		return "B";
+	case 1 << C_BUTTON:
+		return "C";
+	case 1 << X_BUTTON:
+		return "X";
+	case 1 << Y_BUTTON:
+		return "Y";
+	case 1 << Z_BUTTON:
+		return "Z";
+	case 1 << MENU1_BUTTON:
+		return "Menu1";
+	case 1 << MENU2_BUTTON:
+		return "Menu2";
+	case 1 << MENU3_BUTTON:
+		return "Menu3";
+	case 1 << MENU4_BUTTON:
+		return "Menu4";
+	case 1 << L1_BUTTON:
+		return "L1";
+	case 1 << L2_BUTTON:
+		return "L2";
+	case 1 << L3_BUTTON:
+		return "L3";
+	case 1 << R1_BUTTON:
+		return "R1";
+	case 1 << R2_BUTTON:
+		return "R2";
+	case 1 << R3_BUTTON:
+		return "R3";
+	case 1 << DPAD_UP_BUTTON:
+		return "Dpad Up";
+	case 1 << DPAD_DOWN_BUTTON:
+		return "Dpad Down";
+	case 1 << DPAD_LEFT_BUTTON:
+		return "Dpad Left";
+	case 1 << DPAD_RIGHT_BUTTON:
+		return "Dpad Right";
+	case 1 << EXT_BUTTON_L4:
+		return "L4";
+	case 1 << EXT_BUTTON_R4:
+		return "R4";
+	default:
+		return "Invalid";
+	}
+}
+
+QString Frontend::getInputCharacter(int value)
+{
+	if (value < 0)
+		return "Invalid";
+	if (value >= KEYCODE_A && value <= KEYCODE_Z)
+		return QString(QChar((char)(value - KEYCODE_A + Qt::Key_A)));
+	if (value >= KEYCODE_CAPITAL_A && value <= KEYCODE_CAPITAL_Z)
+		return QString(QChar((char)(value - KEYCODE_CAPITAL_A + Qt::Key_A))).toUpper();
+	switch (value) {
+	case KEYCODE_ESCAPE:
+		return "Escape";
+	case KEYCODE_RETURN:
+		return "Enter";
+	case KEYCODE_LEFT:
+		return "Left";
+	case KEYCODE_RIGHT:
+		return "Right";
+	case KEYCODE_UP:
+		return "Up";
+	case KEYCODE_DOWN:
+		return "Down";
+	case KEYCODE_BACKSPACE:
+		return "Backspace";
+	case KEYCODE_LEFT_SHIFT:
+		return "Left Shift";
+	case KEYCODE_RIGHT_SHIFT:
+		return "Right Shift";
+	case KEYCODE_LEFT_CTRL:
+		return "Left Control";
+	case KEYCODE_RIGHT_CTRL:
+		return "Right Control";
+	case KEYCODE_LEFT_ALT:
+		return "Left Alt";
+	case KEYCODE_RIGHT_ALT:
+		return "Right Alt";
+	case KEYCODE_TAB:
+		return "Tab";
+	case KEYCODE_INSERT:
+		return "Insert";
+	case KEYCODE_DELETE:
+		return "Delete";
+	case KEYCODE_HOME:
+		return "Home";
+	case KEYCODE_END:
+		return "End";
+	case KEYCODE_PG_UP:
+		return "Page Up";
+	case KEYCODE_PG_DOWN:
+		return "Page Down";
+	case KEYCODE_KP_PLUS:
+		return "KP Plus";
+	case KEYCODE_KP_MINUS:
+		return "KP Minus";
+	case KEYCODE_KP_MULTIPLY:
+		return "KP Mul";
+	case KEYCODE_KP_DIVIDE:
+		return "KP Div";
+	case KEYCODE_KP_ENTER:
+		return "KP Ent";
+	case KEYCODE_KP_HOME:
+		return "KP Home";
+	case KEYCODE_KP_UP:
+		return "KP Up";
+	case KEYCODE_KP_PG_UP:
+		return "KP Pg Up";
+	case KEYCODE_KP_LEFT:
+		return "KP Left";
+	case KEYCODE_KP_FIVE:
+		return "KP 5";
+	case KEYCODE_KP_RIGHT:
+		return "KP Right";
+	case KEYCODE_KP_END:
+		return "KP End";
+	case KEYCODE_KP_DOWN:
+		return "KP Down";
+	case KEYCODE_KP_PG_DOWN:
+		return "KP Pg Dn";
+	case KEYCODE_KP_INSERT:
+		return "KP Insert";
+	case KEYCODE_KP_DELETE:
+		return "KP Delete";
+	case KEYCODE_F1:
+	case KEYCODE_F2:
+	case KEYCODE_F3:
+	case KEYCODE_F4:
+	case KEYCODE_F5:
+	case KEYCODE_F6:
+	case KEYCODE_F7:
+	case KEYCODE_F8:
+	case KEYCODE_F9:
+	case KEYCODE_F10:
+	case KEYCODE_F11:
+	case KEYCODE_F12:
+		return "F" + QString::number(value - KEYCODE_F1 + 1);
+	case KEYCODE_SPACE:
+		return "Space";
+	case KEYCODE_EXCLAM:
+		return "!";
+	case KEYCODE_QUOTE:
+		return "\"";
+	case KEYCODE_NUMBER:
+		return "#";
+	case KEYCODE_DOLLAR:
+		return "$";
+	case KEYCODE_PERCENT:
+		return "%";
+	case KEYCODE_AMPERSAND:
+		return "&";
+	case KEYCODE_APOSTROPHE:
+		return "'";
+	case KEYCODE_LEFT_PAREN:
+		return "(";
+	case KEYCODE_RIGHT_PAREN:
+		return ")";
+	case KEYCODE_ASTERISK:
+		return "*";
+	case KEYCODE_PLUS:
+		return "+";
+	case KEYCODE_COMMA:
+		return ",";
+	case KEYCODE_MINUS:
+		return "-";
+	case KEYCODE_PERIOD:
+		return ".";
+	case KEYCODE_SLASH:
+		return "/";
+	case KEYCODE_ZERO:
+		return "0";
+	case KEYCODE_ONE:
+		return "1";
+	case KEYCODE_TWO:
+		return "2";
+	case KEYCODE_THREE:
+		return "3";
+	case KEYCODE_FOUR:
+		return "4";
+	case KEYCODE_FIVE:
+		return "5";
+	case KEYCODE_SIX:
+		return "6";
+	case KEYCODE_SEVEN:
+		return "7";
+	case KEYCODE_EIGHT:
+		return "8";
+	case KEYCODE_NINE:
+		return "9";
+	case KEYCODE_COLON:
+		return ":";
+	case KEYCODE_SEMICOLON:
+		return ";";
+	case KEYCODE_LESS_THAN:
+		return "<";
+	case KEYCODE_EQUAL:
+		return "=";
+	case KEYCODE_GREATER_THAN:
+		return ">";
+	case KEYCODE_QUESTION:
+		return "?";
+	case KEYCODE_AT:
+		return "@";
+	case KEYCODE_LEFT_BRACKET:
+		return "[";
+	case KEYCODE_BACK_SLASH:
+		return "\\";
+	case KEYCODE_RIGHT_BRACKET:
+		return "]";
+	case KEYCODE_UNDERSCORE:
+		return "_";
+	case KEYCODE_LEFT_BRACE:
+		return "{";
+	case KEYCODE_BAR:
+		return "|";
+	case KEYCODE_RIGHT_BRACE:
+		return "}";
+	case KEYCODE_TILDE:
+		return "~";
+	default:
+		return QString::number(value) + "?";
+	}
 }
 
 void Frontend::setInputValue(int player, QString button, int value){
@@ -901,6 +1297,35 @@ void Frontend::setInputValue(int player, QString button, int value){
 		m64p->controller[player].axis[1].b = value;
 		return;
 	}
+}
+
+void Frontend::setControllerID(int player, QString value)
+{
+	strcpy(m64p->controller[player].gamepadId, value.left(63).toAscii().data());
+	m64p->controller[player].gamepadId[63] = '\0';
+}
+
+QString Frontend::getControllerID(int player)
+{
+	return QString::fromAscii(m64p->controller[player].gamepadId);
+}
+
+int Frontend::getControllerIndex(int player)
+{
+	QString did = getControllerID(player);
+	for (int i = 0; i < m_devices->size(); i++)
+	{
+		QString id = m_devices->value(i)["id"].toString();
+		if (QString::compare(did, id) == 0)
+			return i + 1;
+	}
+	return 0;
+}
+
+void Frontend::setControllerIndex(int player, int index)
+{
+	QString id = m_devices->value(index - 1)["id"].toString();
+	setControllerID(player, id);
 }
 
 int vkbToMoga(int moga)
@@ -1043,6 +1468,7 @@ void Frontend::LoadTouchOverlay() {
 
 void Frontend::ExitEmulator() {
 	m64p->ExitEmulator();
+	m_emuRunning = false;
 }
 
 int Frontend::mapButton(){
@@ -1138,53 +1564,167 @@ void Frontend::onBoxArtRecieved(const QString &info, bool success)
     request->deleteLater();
 }
 
+void Frontend::onVersionRecieved(const QString &info, bool success)
+{
+    TwitterRequest *request = qobject_cast<TwitterRequest*>(sender());
+
+    if (success)
+    {
+    	QStringList list = info.split('.', QString::SkipEmptyParts);
+    	if (list.length() == 3)
+    	{
+    		bool ok;
+    		int maj = list[0].toInt(&ok);
+    		if (ok)
+    		{
+    			int min = list[1].toInt(&ok);
+    			if (ok)
+    			{
+    				int rel = list[2].toInt(&ok);
+    				if (ok)
+    				{
+    					if (maj > VERSION_MAJOR || min > VERSION_MINOR || rel > VERSION_RELEASE)
+    					{
+    						SystemToast *toast = new SystemToast();
+    						toast->setBody(QString("Version %1.%2.%3 of Mupen64+ BB is available to upgrade your %4.%5.%6")
+    								.arg(list[0], list[1], list[2],
+    										QString::number(VERSION_MAJOR), QString::number(VERSION_MINOR), QString::number(VERSION_RELEASE)));
+    						toast->show();
+    					}
+    				}
+    			}
+    		}
+    	}
+    }
+
+    request->deleteLater();
+}
+
+//http://supportforums.blackberry.com/t5/Native-Development-Knowledge/Gamepad-Vendor-and-Product-IDs/ta-p/2833184
+static QString detect_gamepad_type(GameController* controller)
+{
+	if (strstr(controller->id, "057E-0306") || strstr(controller->id, "057E-0330"))
+	{
+		strlcpy(controller->name, "Wiimote", sizeof(controller->name));
+		return "asset:///images/wii.png";
+	}
+	else if (strstr(controller->id, "20D6-0DAD"))
+	{
+		strlcpy(controller->name, "MOGA Pro", sizeof(controller->name));
+		return "asset:///images/moga.png";
+	}
+	else if (strstr(controller->id, "25B6-0001"))
+	{
+		strlcpy(controller->name, "Fructel Gametel", sizeof(controller->name));
+		return "asset:///images/gametel.png";
+	}
+	else if (strstr(controller->id, "1038-1412"))
+	{
+		strlcpy(controller->name, "SteelSeries Free", sizeof(controller->name));
+		return "asset:///images/steelseries.png";
+	}
+	else if (strstr(controller->id, "046D-C21D"))
+	{
+		strlcpy(controller->name, "Logitech F310", sizeof(controller->name));
+		return "asset:///images/logitech.png";
+	}
+	else if (strstr(controller->id, "045E-028E"))
+	{
+		strlcpy(controller->name, "Microsoft XBox 360", sizeof(controller->name));
+		return "asset:///images/xbox360.png";
+	}
+	else if (strstr(controller->id, "045E-0291"))
+	{
+		strlcpy(controller->name, "Microsoft XBox 360 Wireless", sizeof(controller->name));
+		return "asset:///images/xbox360w.png";
+	}
+	else if (strstr(controller->id, "1689-FD01"))
+	{
+		strlcpy(controller->name, "Razer XBox 360", sizeof(controller->name));
+		return "asset:///images/razer.png";
+	}
+	strlcpy(controller->name, "Gamepad", sizeof(controller->name));
+	return "asset:///images/ca_bluetooth.png";
+}
+
 void Frontend::discoverControllers()
 {
 	int deviceCount;
 	screen_get_context_property_iv(screen_cxt, SCREEN_PROPERTY_DEVICE_COUNT, &deviceCount);
+	fprintf(stderr, "%d connected devices\n", deviceCount);
 	screen_device_t* devices = (screen_device_t*)calloc(deviceCount, sizeof(screen_device_t));
 	screen_get_context_property_pv(screen_cxt, SCREEN_PROPERTY_DEVICES, (void**)devices);
 
 	// Scan the list for gamepad and joystick devices.
 	int i;
+	int controllerIndex = 0;
 	for (i = 0; i < deviceCount; i++) {
 		int type;
 		screen_get_device_property_iv(devices[i], SCREEN_PROPERTY_TYPE, &type);
 
 		if (type == SCREEN_EVENT_GAMEPAD || type == SCREEN_EVENT_JOYSTICK) {
 			fprintf(stderr, "Found a gamepad\n");
-			int type;
-			char id[64];
-			char name[256];
-			int buttonCount;
-			screen_get_device_property_iv(devices[i], SCREEN_PROPERTY_TYPE, &type);
-			screen_get_device_property_cv(devices[i], SCREEN_PROPERTY_ID_STRING, 64, id);
-			screen_get_device_property_cv(devices[i], SCREEN_PROPERTY_VENDOR, 256, name);
-			screen_get_device_property_iv(devices[i], SCREEN_PROPERTY_BUTTON_COUNT, &buttonCount);
-			fprintf(stderr, "Gamepad %s with %d buttons\n", name, buttonCount);
+			GameController *control = &_controllers[controllerIndex];
+			control->handle = devices[i];
+			screen_get_device_property_iv(devices[i], SCREEN_PROPERTY_TYPE, &control->type);
+			screen_get_device_property_cv(devices[i], SCREEN_PROPERTY_ID_STRING, sizeof(control->id), control->id);
+			screen_get_device_property_iv(devices[i], SCREEN_PROPERTY_BUTTON_COUNT, &control->buttonCount);
+			fprintf(stderr, "Gamepad %s with %d buttons\n", control->id, control->buttonCount);
 			QVariantMap map;
-			map["name"] = QString(name) + " (" + QString(id) + ")";
-			QString desc = "Has " + QString::number(buttonCount, 10) + " buttons";
-			int analog0[3];
-			if (!screen_get_device_property_iv(devices[i], SCREEN_PROPERTY_ANALOG0, analog0)) {
+			map["id"] = QString::fromAscii(control->id);
+			QString res = detect_gamepad_type(control);
+			if (control->type == SCREEN_EVENT_GAMEPAD)
+			{
+				sprintf(control->deviceString, "Gamepad device id: %s", control->id);
+				map["name"] = QString::fromAscii(control->name) + " (" + QString(control->id) + ")";
+			}
+			else
+			{
+				sprintf(control->deviceString, "Joystick device id: %s", control->id);
+				map["name"] = "Joystick (" + QString(control->id) + ")";
+			}
+			QString desc = "Has " + QString::number(control->buttonCount, 10) + " buttons";
+			if (!screen_get_device_property_iv(devices[i], SCREEN_PROPERTY_ANALOG0, control->analog0)) {
+				control->analogCount++;
 				fprintf(stderr, "Device has analog0\n");
-				if (!screen_get_device_property_iv(devices[i], SCREEN_PROPERTY_ANALOG1, analog0)) {
+				if (!screen_get_device_property_iv(devices[i], SCREEN_PROPERTY_ANALOG1, control->analog1)) {
+					control->analogCount++;
 					fprintf(stderr, "Device has analog1\n");
 					desc += " with analog0 and analog1";
 				}
 				else
 					desc += " with analog0";
 			}
-			else if (!screen_get_device_property_iv(devices[i], SCREEN_PROPERTY_ANALOG1, analog0)) {
+			else if (!screen_get_device_property_iv(devices[i], SCREEN_PROPERTY_ANALOG1, control->analog1)) {
+				control->analogCount++;
 				fprintf(stderr, "Device has analog1\n");
 				desc += " with analog1";
 			}
 			map["description"] = desc;
 			(*m_devices) << map;
+			emit createOption(QString::fromAscii(control->name), QUrl(res));
+			controllerIndex++;
 		}
 	}
 
 	free(devices);
+	emit controllersDetected();
+}
+
+void Frontend::onCreateOption(QString name, QUrl imageSource)
+{
+	for (int i = 0; i < 4; i++)
+	{
+		DropDown* deviceDropdown = m_tab->findChild<DropDown*>("deviceList" + QString::number(i));
+		if (deviceDropdown)
+		{
+			Option *opt = Option::create()
+							.parent(deviceDropdown)
+							.text(name)
+							.imageSource(imageSource);
+			deviceDropdown->add(opt);
+		}
+	}
 }
 
 void Frontend::detectHDMI()
