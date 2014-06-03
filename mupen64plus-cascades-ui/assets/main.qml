@@ -118,6 +118,27 @@ TabbedPane {
         ComponentDefinition {
             id: aboutSheet
             source: "about.qml"
+        },
+        Tab {
+            id: hdmiTab
+            title: qsTr("HDMI")
+            imageSource: "asset:///images/ic_hdmi.png"
+            
+            Hdmi {
+            }
         }
     ]
+    
+    function hdmiDetected(attached) {
+        if (attached) {
+            mainPane.add(hdmiTab)
+        }
+        else {
+            mainPane.remove(hdmiTab)
+        }
+    }
+    
+    onCreationCompleted: {
+        _frontend.hdmiDetected.connect(hdmiDetected)
+    }
 }
