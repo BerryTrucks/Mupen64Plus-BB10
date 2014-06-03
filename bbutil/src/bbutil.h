@@ -65,6 +65,16 @@ extern int overlay_request;
 extern double DISPLAY_WIDTH;
 extern double DISPLAY_HEIGHT;
 
+extern uint margin_bottom;
+extern uint margin_left;
+
+extern int hdmi_width;
+extern int hdmi_height;
+extern bool use_hdmi;
+extern bool use_overlay;
+extern bool dbg_fps;
+extern bool q10_rotate;
+
 typedef struct
 {
 	char* text;
@@ -84,6 +94,9 @@ extern UIQuad* overlayQuad;
 extern UIQuad* stickQuad;
 extern UIQuad* osd_save;
 extern UIQuad* osd_load;
+
+typedef void (*m64p_touch_overlay_callback)(void);
+extern m64p_touch_overlay_callback touch_overlay_callback;
 
 #ifdef __cplusplus
 extern "C" {

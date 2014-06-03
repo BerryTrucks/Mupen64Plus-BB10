@@ -52,11 +52,15 @@ EGLDisplay egl_disp = 0;
 EGLSurface egl_surf = 0;
 font_t* font;
 
+EGLSurface egl_surf_overlay = 0;
+screen_window_t screen_win_overlay = 0;
+
 static EGLConfig egl_conf;
 static EGLContext egl_ctx;
 
 screen_context_t screen_cxt;
 screen_window_t screen_win;
+screen_window_t back_screen = 0;
 static screen_display_t screen_disp;
 static int nbuffers = 2;
 static int initialized = 0;
@@ -79,10 +83,22 @@ UIQuad* stickQuad = NULL;
 UIQuad* osd_save = NULL;
 UIQuad* osd_load = NULL;
 float save = 0.0f, load = 0.0f;
-int overlay_request = 1;
+int overlay_request = 0;
 
 double DISPLAY_WIDTH = 1280.0;
 double DISPLAY_HEIGHT = 768.0;
+
+int hdmi_width = -1;
+int hdmi_height = -1;
+bool use_hdmi = false;
+bool use_overlay = false;
+bool dbg_fps = false;
+bool q10_rotate = false;
+
+m64p_touch_overlay_callback touch_overlay_callback = 0;
+
+uint margin_bottom = 0;
+uint margin_left = 0;
 
 static void
 bbutil_egl_perror(const char *msg) {
@@ -113,8 +129,44 @@ bbutil_egl_perror(const char *msg) {
     fprintf(stderr, "%s: %s\n", msg, errmsg[message_index]);
 }
 
-void PB_eglSwapBuffers(){
-	eglSwapBuffers(egl_disp, egl_surf);
+void PB_eglSwapBuffers() {
+    /*if (margin_left || margin_bottom)
+    {
+        glEnable(GL_SCISSOR_TEST);
+        float scissor[4];
+        glGetFloatv(GL_SCISSOR_BOX, scissor);
+        glClearColor(0, 0, 0, 1.0);
+        //if (margin_bottom)
+        //    glScissor(0, 0, DISPLAY_WIDTH, margin_bottom);
+        //else
+        //    glScissor(0, 0, margin_left, DISPLAY_HEIGHT);
+        //glClear(GL_COLOR_BUFFER_BIT);
+        if (margin_bottom)
+            glScissor(0, DISPLAY_HEIGHT - (margin_bottom << 1), DISPLAY_WIDTH, margin_bottom);
+        else
+            glScissor(DISPLAY_WIDTH - (margin_left << 1), 0, margin_left, DISPLAY_HEIGHT);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(scissor[0], scissor[1], scissor[2], scissor[3]);
+    }*/
+    if (use_overlay) {
+        eglSwapBuffers(egl_disp, egl_surf);
+        bool currentScissor = glIsEnabled(GL_SCISSOR_TEST);
+        glDisable(GL_SCISSOR_TEST);
+        eglMakeCurrent(egl_disp, egl_surf_overlay, egl_surf_overlay, egl_ctx);
+        glClearColor(0, 0, 0, 0.0);
+        glClear(GL_COLOR_BUFFER_BIT);
+        if (currentScissor)
+            glEnable(GL_SCISSOR_TEST);
+    }
+    if (touch_overlay_callback)
+        (*touch_overlay_callback)();
+    if (use_overlay)
+    {
+        eglSwapBuffers(egl_disp, egl_surf_overlay);
+        eglMakeCurrent(egl_disp, egl_surf, egl_surf, egl_ctx);
+    }
+    else
+        eglSwapBuffers(egl_disp, egl_surf);
 }
 
 /**
@@ -134,7 +186,7 @@ get_window_group_id()
 
 void bbutil_defocus()
 {
-	int z = 1;
+	int z = 2;
 	screen_set_window_property_iv(screen_win, SCREEN_PROPERTY_ZORDER, &z);
 }
 
@@ -142,8 +194,24 @@ static int menuOpen = 0;
 
 int bbutil_offset_menu(int offset)
 {
-	int pos[2] = { 0, offset };
-	screen_set_window_property_iv(screen_win, SCREEN_PROPERTY_POSITION, pos);
+	int pos[2];// = { margin_left, offset + margin_bottom };
+	if (q10_rotate)
+	{
+	    pos[0] = -offset;
+	    pos[1] = 0;
+	}
+	else
+	{
+        pos[0] = margin_left;
+        pos[1] = offset + margin_bottom;
+	}
+    int pos2[2] = { 0, offset };
+    if (!use_hdmi)
+    {
+        screen_set_window_property_iv(screen_win, SCREEN_PROPERTY_POSITION, pos);
+        screen_set_window_property_iv(back_screen, SCREEN_PROPERTY_POSITION, pos2);
+    }
+    screen_set_window_property_iv(screen_win_overlay, SCREEN_PROPERTY_POSITION, pos2);
 	if (offset > 0) {
 		menuOpen = 1;
 		bbutil_defocus();
@@ -157,8 +225,14 @@ int bbutil_offset_menu(int offset)
 
 int bbutil_close_menu()
 {
-	int pos[2] = { 0, 0 };
-	screen_set_window_property_iv(screen_win, SCREEN_PROPERTY_POSITION, pos);
+	int pos[2] = { margin_left, margin_bottom };
+    int pos2[2] = { 0, 0 };
+    if (!use_hdmi)
+    {
+        screen_set_window_property_iv(screen_win, SCREEN_PROPERTY_POSITION, pos);
+        screen_set_window_property_iv(back_screen, SCREEN_PROPERTY_POSITION, pos2);
+    }
+    screen_set_window_property_iv(screen_win_overlay, SCREEN_PROPERTY_POSITION, pos2);
 	menuOpen = 0;
 	bbutil_focus();
 	return 0;
@@ -177,7 +251,7 @@ void bbutil_focus()
 
 int
 bbutil_init_egl(screen_context_t ctx, char *groupId, char *windowId) {
-    int usage;
+    int usage, usage_back;
     int format = SCREEN_FORMAT_RGBX8888;
     EGLint interval = 1;
     int rc, num_configs;
@@ -185,10 +259,10 @@ bbutil_init_egl(screen_context_t ctx, char *groupId, char *windowId) {
     EGLint attrib_list[]= { EGL_RED_SIZE,        8,
                             EGL_GREEN_SIZE,      8,
                             EGL_BLUE_SIZE,       8,
-                            EGL_ALPHA_SIZE,       8,
+                            EGL_ALPHA_SIZE,      8,
                             EGL_SURFACE_TYPE,    EGL_WINDOW_BIT,
                             EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-                            EGL_DEPTH_SIZE, 24,
+                            EGL_DEPTH_SIZE, 	 24,
                             EGL_NONE};
 
 #ifdef USING_GL11
@@ -202,6 +276,8 @@ bbutil_init_egl(screen_context_t ctx, char *groupId, char *windowId) {
     fprintf(stderr, "bbutil should be compiled with either USING_GL11 or USING_GL20 -D flags\n");
     return EXIT_FAILURE;
 #endif
+
+    usage_back = SCREEN_USAGE_NATIVE;
 
     if(egl_disp){
     	int z = 10;
@@ -256,40 +332,112 @@ bbutil_init_egl(screen_context_t ctx, char *groupId, char *windowId) {
         return EXIT_FAILURE;
     }
 
-    rc = screen_create_window_type(&screen_win, screen_cxt, SCREEN_CHILD_WINDOW);
-    //rc = screen_create_window(&screen_win, screen_cxt);
+    if (use_hdmi)
+        rc = screen_create_window(&screen_win, screen_cxt);
+    else
+        rc = screen_create_window_type(&screen_win, screen_cxt, SCREEN_CHILD_WINDOW);
     if (rc) {
-        perror("screen_create_window");
+        fprintf(stderr, "screen_create_window\n");
         bbutil_terminate();
         return EXIT_FAILURE;
     }
-
-    /*int ndisplays;
-    screen_get_context_property_iv(screen_cxt, SCREEN_PROPERTY_DISPLAY_COUNT, &ndisplays);
-    fprintf(stderr, "Display Count: %d\n", ndisplays);
-    if (ndisplays > 1) {
-    	screen_display_t *screen_dpy = calloc(ndisplays, sizeof(screen_display_t));
-    	screen_get_context_property_pv(screen_cxt, SCREEN_PROPERTY_DISPLAYS, (void**)screen_dpy);
-    	screen_set_window_property_pv(screen_win, SCREEN_PROPERTY_DISPLAY, (void**)&screen_dpy[1]);
-    	int i = 0;
-        int sresolution[2];
-    	for (i = 0; i < ndisplays; i++) {
-    		screen_get_display_property_iv(screen_dpy[i], SCREEN_PROPERTY_SIZE, sresolution);
-    		fprintf(stderr, "Display %d: (%d, %d)\n", i, sresolution[0], sresolution[1]);
-    	}
-    	free(screen_dpy);
-    }*/
+    if (margin_left || margin_bottom)
+    {
+        if (use_hdmi)
+            rc = screen_create_window(&back_screen, screen_cxt);
+        else
+            rc = screen_create_window_type(&back_screen, screen_cxt, SCREEN_CHILD_WINDOW);
+        //rc = screen_create_window(&screen_win, screen_cxt);
+        if (rc) {
+            fprintf(stderr, "screen_create_window - back_screen\n");
+            bbutil_terminate();
+            return EXIT_FAILURE;
+        }
+    }
+    if (/*margin_left || margin_bottom || */use_hdmi)
+    {
+        rc = screen_create_window_type(&screen_win_overlay, screen_cxt, SCREEN_CHILD_WINDOW);
+        //rc = screen_create_window(&screen_win, screen_cxt);
+        if (rc) {
+            fprintf(stderr, "screen_create_window - screen_win_overlay\n");
+            bbutil_terminate();
+            return EXIT_FAILURE;
+        }
+    }
 
     /*if (screen_set_window_property_cv(screen_win, SCREEN_PROPERTY_ID_STRING, strlen(windowId),
 		windowId) != 0) {
 		return false;
 	}*/
 
-    if (screen_join_window_group(screen_win, groupId) != 0){
-    	perror("screen_join_window_group");
-		bbutil_terminate();
-		return EXIT_FAILURE;
+    if (!use_hdmi)
+    {
+        if (screen_join_window_group(screen_win, groupId) != 0){
+            fprintf(stderr, "screen_join_window_group\n");
+            bbutil_terminate();
+            return EXIT_FAILURE;
+        }
+        if (margin_left || margin_bottom)
+        {
+            if (screen_join_window_group(back_screen, groupId) != 0){
+                fprintf(stderr, "screen_join_window_group - back_screen\n");
+                bbutil_terminate();
+                return EXIT_FAILURE;
+            }
+        }
     }
+    if (/*margin_left || margin_bottom || */use_hdmi)
+    {
+        if (screen_join_window_group(screen_win_overlay, groupId) != 0){
+            fprintf(stderr, "screen_join_window_group - screen_win_overlay\n");
+            bbutil_terminate();
+            return EXIT_FAILURE;
+        }
+    }
+
+
+    int ndisplays;
+    screen_get_context_property_iv(screen_cxt, SCREEN_PROPERTY_DISPLAY_COUNT, &ndisplays);
+    screen_display_t *screen_dpy = calloc(ndisplays, sizeof(screen_display_t));
+    screen_get_context_property_pv(screen_cxt, SCREEN_PROPERTY_DISPLAYS, (void**)screen_dpy);
+    int i;
+    for (i = 0; i < ndisplays; i++)
+    {
+        int type;
+        screen_get_display_property_iv(screen_dpy[i], SCREEN_PROPERTY_TYPE, &type);
+        if (type == 30311)
+        {
+            if (use_hdmi)
+            {
+                screen_set_window_property_pv(screen_win, SCREEN_PROPERTY_DISPLAY, (void**)&screen_dpy[i]);
+                if (margin_left || margin_bottom)
+                    screen_set_window_property_pv(back_screen, SCREEN_PROPERTY_DISPLAY, (void**)&screen_dpy[i]);
+            }
+        }
+        else if (type == 30304)
+        {
+            if (use_hdmi)
+                screen_set_window_property_pv(screen_win_overlay, SCREEN_PROPERTY_DISPLAY, (void**)&screen_dpy[i]);
+            int screen_resolution[2];
+
+            rc = screen_get_display_property_iv(screen_dpy[i], SCREEN_PROPERTY_SIZE, screen_resolution);
+            if (screen_resolution[0] > screen_resolution[1]) {
+                DISPLAY_WIDTH = screen_resolution[0];
+                DISPLAY_HEIGHT = screen_resolution[1];
+            }
+            else {
+                DISPLAY_WIDTH = screen_resolution[1];
+                DISPLAY_HEIGHT = screen_resolution[0];
+            }
+            if (hdmi_width < 0)
+                hdmi_width = DISPLAY_WIDTH;
+            if (hdmi_height < 0)
+                hdmi_height = DISPLAY_HEIGHT;
+            printf("WIDTH: %d\nHEIGHT: %d\n", (int)DISPLAY_WIDTH, (int)DISPLAY_HEIGHT);
+        }
+    }
+    free(screen_dpy);
+
     /*if (screen_create_window_group(screen_win, "gamewindowgroup") != 0) {
     	perror("screen_create_window_group");
     	bbutil_terminate();
@@ -298,39 +446,63 @@ bbutil_init_egl(screen_context_t ctx, char *groupId, char *windowId) {
 
     rc = screen_set_window_property_iv(screen_win, SCREEN_PROPERTY_FORMAT, &format);
     if (rc) {
-        perror("screen_set_window_property_iv(SCREEN_PROPERTY_FORMAT)");
+    	fprintf(stderr, "screen_set_window_property_iv(SCREEN_PROPERTY_FORMAT)\n");
         bbutil_terminate();
         return EXIT_FAILURE;
+    }
+    if (margin_left || margin_bottom)
+    {
+        rc = screen_set_window_property_iv(back_screen, SCREEN_PROPERTY_FORMAT, &format);
+        if (rc) {
+            fprintf(stderr, "screen_set_window_property_iv(SCREEN_PROPERTY_FORMAT) - back_screen\n");
+            bbutil_terminate();
+            return EXIT_FAILURE;
+        }
+    }
+    if (/*margin_left || margin_bottom || */use_hdmi)
+    {
+        rc = screen_set_window_property_iv(screen_win_overlay, SCREEN_PROPERTY_FORMAT, &format);
+        if (rc) {
+            fprintf(stderr, "screen_set_window_property_iv(SCREEN_PROPERTY_FORMAT) - screen_win_overlay\n");
+            bbutil_terminate();
+            return EXIT_FAILURE;
+        }
     }
 
     rc = screen_set_window_property_iv(screen_win, SCREEN_PROPERTY_USAGE, &usage);
     if (rc) {
-        perror("screen_set_window_property_iv(SCREEN_PROPERTY_USAGE)");
+    	fprintf(stderr, "screen_set_window_property_iv(SCREEN_PROPERTY_USAGE)\n");
         bbutil_terminate();
         return EXIT_FAILURE;
+    }
+    if (margin_left || margin_bottom)
+    {
+        rc = screen_set_window_property_iv(back_screen, SCREEN_PROPERTY_USAGE, &usage_back);
+        if (rc) {
+            fprintf(stderr, "screen_set_window_property_iv(SCREEN_PROPERTY_USAGE) - back_screen\n");
+            bbutil_terminate();
+            return EXIT_FAILURE;
+        }
+    }
+    if (/*margin_left || margin_bottom || */use_hdmi)
+    {
+        rc = screen_set_window_property_iv(screen_win_overlay, SCREEN_PROPERTY_USAGE, &usage);
+        if (rc) {
+            fprintf(stderr, "screen_set_window_property_iv(SCREEN_PROPERTY_USAGE) - screen_win_overlay\n");
+            bbutil_terminate();
+            return EXIT_FAILURE;
+        }
     }
 
     rc = screen_get_window_property_pv(screen_win, SCREEN_PROPERTY_DISPLAY, (void **)&screen_disp);
     if (rc) {
-        perror("screen_get_window_property_pv");
+    	fprintf(stderr, "screen_get_window_property_pv(SCREEN_PROPERTY_DISPLAY)\n");
         bbutil_terminate();
         return EXIT_FAILURE;
     }
 
-    int screen_resolution[2];
-
-    rc = screen_get_display_property_iv(screen_disp, SCREEN_PROPERTY_SIZE, screen_resolution);
-    if (screen_resolution[0] > screen_resolution[1]) {
-    	DISPLAY_WIDTH = screen_resolution[0];
-    	DISPLAY_HEIGHT = screen_resolution[1];
-    }
-    else {
-    	DISPLAY_WIDTH = screen_resolution[1];
-    	DISPLAY_HEIGHT = screen_resolution[0];
-    }
-    printf("WIDTH: %d\nHEIGHT: %d\n", (int)DISPLAY_WIDTH, (int)DISPLAY_HEIGHT);
     if (rc) {
-        perror("screen_get_display_property_iv");
+    	fprintf(stderr, "screen_get_display_property_iv\n");
         bbutil_terminate();
         return EXIT_FAILURE;
     }
@@ -341,21 +513,22 @@ bbutil_init_egl(screen_context_t ctx, char *groupId, char *windowId) {
     screen_display_mode_t screen_mode;
     rc = screen_get_display_property_pv(screen_disp, SCREEN_PROPERTY_MODE, (void**)&screen_mode);
     if (rc) {
-        perror("screen_get_display_property_pv");
+    	fprintf(stderr, "screen_get_display_property_pv(SCREEN_PROPERTY_MODE)\n");
         bbutil_terminate();
         return EXIT_FAILURE;
     }
 
-    int size[2];
-    rc = screen_get_window_property_iv(screen_win, SCREEN_PROPERTY_BUFFER_SIZE, size);
-    printf("WIDTH2: %d\nHEIGHT2: %d\n", size[0], size[1]);
-    if (rc) {
-        perror("screen_get_window_property_iv");
-        bbutil_terminate();
-        return EXIT_FAILURE;
-    }
+    /*if (margin_left || margin_bottom)
+    {
+        screen_display_t screen_disp2;
+        screen_get_window_property_pv(screen_win_overlay, SCREEN_PROPERTY_DISPLAY, (void **)&screen_disp2);
+        int trans = SCREEN_TRANSPARENCY_SOURCE_OVER;
+        screen_set_display_property_iv(screen_disp2, SCREEN_PROPERTY_TRANSPARENCY, &trans);
+    }*/
 
-    int buffer_size[2] = {DISPLAY_WIDTH, DISPLAY_HEIGHT};
+    int buffer_size[2] = {hdmi_width - (margin_left << 1), hdmi_height - (margin_bottom << 1)};
+    int buffer_back[2] = {hdmi_width, hdmi_height};
+    int buffer_overlay[2] = {DISPLAY_WIDTH, DISPLAY_HEIGHT};
 
 /*
     if ((angle == 0) || (angle == 180)) {
@@ -379,14 +552,85 @@ bbutil_init_egl(screen_context_t ctx, char *groupId, char *windowId) {
 
     rc = screen_set_window_property_iv(screen_win, SCREEN_PROPERTY_BUFFER_SIZE, buffer_size);
     if (rc) {
-        perror("screen_set_window_property_iv");
+    	fprintf(stderr, "screen_set_window_property_iv(SCREEN_PROPERTY_BUFFER_SIZE)\n");
+        bbutil_terminate();
+        return EXIT_FAILURE;
+    }
+    if (use_hdmi)
+    {
+        rc = screen_set_window_property_iv(screen_win, SCREEN_PROPERTY_SIZE, buffer_size);
+        if (rc) {
+            fprintf(stderr, "screen_set_window_property_iv(SCREEN_PROPERTY_SIZE)\n");
+            bbutil_terminate();
+            return EXIT_FAILURE;
+        }
+    }
+    if (margin_left || margin_bottom)
+    {
+        rc = screen_set_window_property_iv(back_screen, SCREEN_PROPERTY_BUFFER_SIZE, buffer_back);
+        if (rc) {
+            fprintf(stderr, "screen_set_window_property_iv(SCREEN_PROPERTY_BUFFER_SIZE) - back_screen\n");
+            bbutil_terminate();
+            return EXIT_FAILURE;
+        }
+
+        screen_buffer_t screen_buf = NULL;
+        screen_create_window_buffers(back_screen, 1);
+        screen_get_window_property_pv(back_screen, SCREEN_PROPERTY_RENDER_BUFFERS, (void**)&screen_buf);
+        int attribs[] = { SCREEN_BLIT_COLOR, 0xff000000, SCREEN_BLIT_END };
+        int rect[] = { 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT };
+        screen_fill(ctx, screen_buf, attribs);
+        screen_post_window(back_screen, screen_buf, 1, rect, 0);
+
+        int margins[] = { margin_left, margin_bottom };
+        rc = screen_set_window_property_iv(screen_win, SCREEN_PROPERTY_POSITION, margins);
+        if (rc) {
+            fprintf(stderr, "screen_set_window_property_iv(SCREEN_PROPERTY_POSITION)\n");
+            bbutil_terminate();
+            return EXIT_FAILURE;
+        }
+    }
+    if (/*margin_left || margin_bottom || */use_hdmi)
+    {
+        rc = screen_set_window_property_iv(screen_win_overlay, SCREEN_PROPERTY_BUFFER_SIZE, buffer_overlay);
+        if (rc) {
+            fprintf(stderr, "screen_set_window_property_iv(SCREEN_PROPERTY_BUFFER_SIZE) - screen_win_overlay\n");
+            bbutil_terminate();
+            return EXIT_FAILURE;
+        }
+    }
+
+    int size[2];
+    rc = screen_get_window_property_iv(screen_win, SCREEN_PROPERTY_BUFFER_SIZE, size);
+    printf("WIDTH2: %d\nHEIGHT2: %d\n", size[0], size[1]);
+    if (rc) {
+        fprintf(stderr, "screen_get_window_property_iv(SCREEN_PROPERTY_BUFFER_SIZE)\n");
         bbutil_terminate();
         return EXIT_FAILURE;
     }
 
     int z = 1;
+    if (use_hdmi)
+        z = 2;
 	if (screen_set_window_property_iv(screen_win, SCREEN_PROPERTY_ZORDER, &z) != 0) {
+		fprintf(stderr, "screen_set_window_property_iv(SCREEN_PROPERTY_ZORDER)\n");
 		return EXIT_FAILURE;
+	}
+	if (margin_left || margin_bottom)
+	{
+	    if (use_hdmi)
+	        z = 1;
+        if (screen_set_window_property_iv(back_screen, SCREEN_PROPERTY_ZORDER, &z) != 0) {
+            fprintf(stderr, "screen_set_window_property_iv(SCREEN_PROPERTY_ZORDER) - back_screen\n");
+            return EXIT_FAILURE;
+        }
+	}
+	if (/*margin_left || margin_bottom || */use_hdmi)
+	{
+        if (screen_set_window_property_iv(screen_win_overlay, SCREEN_PROPERTY_ZORDER, &z) != 0) {
+            fprintf(stderr, "screen_set_window_property_iv(SCREEN_PROPERTY_ZORDER) - screen_win_overlay\n");
+            return EXIT_FAILURE;
+        }
 	}
 /*
     rc = screen_set_window_property_iv(screen_win, SCREEN_PROPERTY_ROTATION, &angle);
@@ -398,16 +642,67 @@ bbutil_init_egl(screen_context_t ctx, char *groupId, char *windowId) {
 
     rc = screen_create_window_buffers(screen_win, nbuffers);
     if (rc) {
-        perror("screen_create_window_buffers");
+    	fprintf(stderr, "screen_create_window_buffers\n");
         bbutil_terminate();
         return EXIT_FAILURE;
     }
+    if (/*margin_left || margin_bottom || */use_hdmi)
+    {
+        rc = screen_create_window_buffers(screen_win_overlay, nbuffers);
+        if (rc) {
+            fprintf(stderr, "screen_create_window_buffers - screen_win_overlay\n");
+            bbutil_terminate();
+            return EXIT_FAILURE;
+        }
+    }
+
+    if (q10_rotate)
+    {
+        int rotate = 90;
+        if (use_hdmi)
+            screen_set_window_property_iv(screen_win_overlay, SCREEN_PROPERTY_ROTATION, &rotate);
+        else
+            screen_set_window_property_iv(screen_win, SCREEN_PROPERTY_ROTATION, &rotate);
+    }
+
+    if (dbg_fps)
+    {
+        int fps = SCREEN_DEBUG_GRAPH_FPS;
+        if (screen_win_overlay)
+            screen_set_window_property_iv(screen_win_overlay, SCREEN_PROPERTY_DEBUG, &fps);
+        else
+            screen_set_window_property_iv(screen_win, SCREEN_PROPERTY_DEBUG, &fps);
+    }
+
+    /*if (use_hdmi)
+    {
+        int scaling = SCREEN_QUALITY_FASTEST;
+        screen_set_window_property_iv(screen_win, SCREEN_PROPERTY_SCALE_QUALITY, &scaling);
+    }*/
+
 
     egl_surf = eglCreateWindowSurface(egl_disp, egl_conf, screen_win, NULL);
     if (egl_surf == EGL_NO_SURFACE) {
         bbutil_egl_perror("eglCreateWindowSurface");
         bbutil_terminate();
         return EXIT_FAILURE;
+    }
+    if (/*margin_left || margin_bottom || */use_hdmi)
+    {
+        egl_surf_overlay = eglCreateWindowSurface(egl_disp, egl_conf, screen_win_overlay, NULL);
+        if (egl_surf == EGL_NO_SURFACE) {
+            bbutil_egl_perror("eglCreateWindowSurface - screen_win_overlay");
+            bbutil_terminate();
+            return EXIT_FAILURE;
+        }
+    }
+
+    if (!use_overlay && use_hdmi)
+    {
+        eglMakeCurrent(egl_disp, egl_surf_overlay, egl_surf_overlay, egl_ctx);
+        glClearColor(0, 0, 0, 0.0);
+        glClear(GL_COLOR_BUFFER_BIT);
+        eglSwapBuffers(egl_disp, egl_surf_overlay);
     }
 
     rc = eglMakeCurrent(egl_disp, egl_surf, egl_surf, egl_ctx);
@@ -429,6 +724,8 @@ bbutil_init_egl(screen_context_t ctx, char *groupId, char *windowId) {
 
 	int idleMode = SCREEN_IDLE_MODE_KEEP_AWAKE;
 	screen_set_window_property_iv(screen_win, SCREEN_PROPERTY_IDLE_MODE, &idleMode);
+	if (screen_win_overlay)
+	    screen_set_window_property_iv(screen_win_overlay, SCREEN_PROPERTY_IDLE_MODE, &idleMode);
 
     initialized = 1;
 
@@ -449,8 +746,21 @@ bbutil_terminate() {
             egl_ctx = EGL_NO_CONTEXT;
         }
         if (screen_win != NULL) {
+            if (!use_hdmi)
+                screen_leave_window_group(screen_win);
             screen_destroy_window(screen_win);
             screen_win = NULL;
+        }
+        if (back_screen != NULL) {
+            if (!use_hdmi)
+                screen_leave_window_group(back_screen);
+            screen_destroy_window(back_screen);
+            back_screen = 0;
+        }
+        if (screen_win_overlay != NULL) {
+            screen_leave_window_group(screen_win_overlay);
+            screen_destroy_window(screen_win_overlay);
+            screen_win_overlay = NULL;
         }
         eglTerminate(egl_disp);
         egl_disp = EGL_NO_DISPLAY;
@@ -1466,7 +1776,8 @@ void compile_text_program(){
 enum VIDEO_PLUGIN
 {
 	VIDEO_PLUGIN_RICE,
-	VIDEO_PLUGIN_GLES2N64
+	VIDEO_PLUGIN_GLES2N64,
+	VIDEO_PLUGIN_GLIDE64
 };
 
 void set_z_order(int z){
