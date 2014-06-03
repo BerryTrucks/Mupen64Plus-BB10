@@ -8,6 +8,7 @@ Sheet {
     
     Page {
         Container {
+            rotationZ: _frontend.rotateQ10 ? 90 : 0
             Container {
                 preferredHeight: 175.0
                 preferredWidth: _frontend.emuWidth
@@ -27,14 +28,15 @@ Sheet {
                 }
                 MupenMenuItem {
                     imageSource: "asset:///images/overlay.png"
-                    textUpper: qsTr("Toggle")
+                    textUpper: qsTr("Cycle")
                     textLower: qsTr("Overlay")
+                    visible: !_frontend.Keyboard && !_frontend.noTouchScreenControllers
 
                     onClicked: {
                         _frontend.LoadTouchOverlay()
                     }
                 }
-                MupenMenuItem {
+                /*MupenMenuItem {
                     imageSource: "asset:///images/home.png"
                     textUpper: qsTr("Menu")
                     textLower: qsTr("(Broken)")
@@ -46,7 +48,7 @@ Sheet {
                         SupportedDisplayOrientation.DisplayPortrait;
                         closing()
                     }
-                }
+                }*/
                 MupenMenuItem {
                     imageSource: "asset:///images/ic_cancel.png"
 	                textUpper: qsTr("Close")
