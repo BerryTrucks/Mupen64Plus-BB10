@@ -16,9 +16,14 @@ Page {
         	    
         	    Label {
                     text: qsTr("Input Setings")
-                    textStyle.color: Color.White
                     textStyle.fontSize: FontSize.Large
                     verticalAlignment: VerticalAlignment.Center
+                    
+                    onCreationCompleted: {
+                        if (!_frontend.isOSThree && _frontend.themeIndex == 0) {
+                            textStyle.color = Color.White
+                        }
+                    }
                 }
         	}
         	
