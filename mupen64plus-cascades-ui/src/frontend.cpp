@@ -17,6 +17,7 @@
 #include <unistd.h>
 #include <string>
 #include <sstream>
+#include <climits>
 
 #include <bb/cascades/QmlDocument>
 #include <bb/cascades/TabbedPane>
@@ -42,6 +43,8 @@
 #include <bb/cascades/pickers/FileType>
 #include <QSignalMapper>
 #include <bb/data/XmlDataAccess>
+#include <bb/platform/HomeScreen>
+#include <bb/platform/PlatformInfo>
 
 #include <bb/system/SystemToast>
 #include <bps/bps.h>
@@ -49,12 +52,15 @@
 #include <bps/event.h>
 #include <sys/keycodes.h>
 
+#include <bb/Packageinfo>
+
 #include "main.h"
 #include "bbutil.h"
 
 #include <sys/neutrino.h>
 
 using namespace bb::cascades;
+using namespace bb::platform;
 using namespace bb::device;
 using namespace bb::system;
 using namespace bb::data;
@@ -72,6 +78,8 @@ QString CheatList = "";
 int chid = -1, coid = -1;
 
 extern bool debug_mode;
+
+#define COLORIZE(color) ((float)(((double)(color)) / 255.0))
 
 enum GamePadButton{
    A_BUTTON=0,
@@ -225,46 +233,82 @@ QDataStream& operator>>(QDataStream& in, Game &obj)
 	return in;
 }
 
-Frontend::Frontend(int theme)
+Frontend::Frontend()
 {
-	ThemeSupport* themeSupport = Application::instance()->themeSupport();
-	Theme* currentTheme = themeSupport->theme();
-	ColorTheme* colorTheme = currentTheme->colorTheme();
-	VisualStyle::Type style = colorTheme->style();
-	m_color = (ThemeColor)theme;
-	switch (style)
-	{
-	case VisualStyle::Bright:
-		m_isbright = true;
-		break;
-	case VisualStyle::Dark:
-		m_isbright = false;
-		break;
-	default:
-		m_isbright = !hasKeyboard();
-		break;
-	}
+    if (m_settings->value("THEME", -1).toInt() < 0)
+    {
+        ThemeSupport* themeSupport = Application::instance()->themeSupport();
+        Theme* currentTheme = themeSupport->theme();
+        ColorTheme* colorTheme = currentTheme->colorTheme();
+        VisualStyle::Type style = colorTheme->style();
+        switch (style)
+        {
+        case VisualStyle::Bright:
+            m_settings->setValue("THEME", 0);
+            break;
+        case VisualStyle::Dark:
+            m_settings->setValue("THEME", 1);
+            break;
+        }
+    }
 	qmlRegisterType<bb::cascades::pickers::FilePicker>("bb.cascades.pickers", 1, 0, "FilePicker");
 	qmlRegisterUncreatableType<bb::cascades::pickers::FileType>("bb.cascades.pickers", 1, 0, "FileType", "");
 	qmlRegisterType<ImageLoader>();
 	qRegisterMetaType<Game>("Game");
 	qRegisterMetaTypeStreamOperators<Game>("Game");
 
+	bb::PackageInfo pacInfo;
+	QStringList version = pacInfo.version().split('.');
+	bool ok = false;
+	if (version.length() == 4)
+	{
+	    VERSION_MAJOR = version[0].toInt(&ok);
+	    if (!ok) goto NOT_OK;
+	    VERSION_MINOR = version[1].toInt(&ok);
+        if (!ok) goto NOT_OK;
+	    VERSION_RELEASE = version[2].toInt(&ok);
+	}
+NOT_OK:
+	if (!ok)
+	{
+	    VERSION_MAJOR = INT_MAX;
+	    VERSION_MINOR = INT_MAX;
+	    VERSION_RELEASE = INT_MAX;
+	}
+
+#ifdef BB103
+    m_isOsThree = true;
+#else
+    m_isOsThree = false;
+    PlatformInfo info;
+    QString os = info.osVersion();
+    QStringList oss = os.split('.', QString::SkipEmptyParts);
+    if (oss.length() > 1)
+    {
+        bool ok;
+        int min = oss[1].toInt(&ok);
+        if (min > 2)
+            m_isOsThree = true;
+    }
+#endif
+
 	//Set up a
 	m_hdmiInfo = NULL;
+	m_useHdmi = false;
 	m_emuRunning = false;
 	m_boxart = 0;
 	mVideoPlugin = 0;
 	m_boxartLoaded = false;
 	mAudio = 0;
 	m_menuOffset = 0;
-	m_settings = new QSettings("emulators", "mupen64p");
 	m_devices = new QMapListDataModel();
 	m_history = new QMapListDataModel();
 	m_menuAnimation = new QPropertyAnimation(this, "menuOffset");
 	m_animationLock = new QMutex();
 	m_menuAnimation->setDuration(250);
 	m_coverImage = "asset:///images/mupen64plus.png";
+	m_numMenuItems = 0;
+	m_noTouchScreenControllers = true;
 
 	if(access("shared/misc/n64/", F_OK) != 0){
 		mkdir("shared/misc/n64/", S_IRWXU | S_IRWXG);
@@ -346,24 +390,31 @@ Frontend::~Frontend()
 
 void Frontend::setBright(int index)
 {
-	if (index == (int)m_color)
-		return;
-	QFile::remove("data/dark.dat");
-	QFile::remove("data/bright.dat");
-	if (index == 0)
-	{
-		QFile file("data/bright.dat");
-		file.open(QFile::WriteOnly);
-		file.close();
-		m_color = Bright;
-	}
-	else
-	{
-		QFile file("data/dark.dat");
-		file.open(QFile::WriteOnly);
-		file.close();
-		m_color = Dark;
-	}
+    m_settings->setValue("THEME", index);
+}
+
+void Frontend::refreshColours()
+{
+#ifdef BB103
+    Color primary = Color::fromRGBA(COLORIZE(primaryColourRed()), COLORIZE(primaryColourGreen()), COLORIZE(primaryColourBlue()));
+    Color base = Color::fromRGBA(COLORIZE(baseColourRed()), COLORIZE(baseColourGreen()), COLORIZE(baseColourBlue()));
+    if (primaryColourIndex() == 0)
+        Application::instance()->themeSupport()->setPrimaryColor(bb::cascades::Color());
+    else if (baseColourIndex() == 0)
+        Application::instance()->themeSupport()->setPrimaryColor(primary);
+    else
+        Application::instance()->themeSupport()->setPrimaryColor(primary, base);
+#endif
+}
+
+void Frontend::refreshTheme()
+{
+#ifdef BB103
+    if (themeIndex())
+        Application::instance()->themeSupport()->setVisualStyle(VisualStyle::Dark);
+    else
+        Application::instance()->themeSupport()->setVisualStyle(VisualStyle::Bright);
+#endif
 }
 
 bool Frontend::debugMode()
@@ -540,15 +591,149 @@ void Frontend::run()
 			m64p->SetConfigParameter(std::string("UI-Console[VideoPlugin]=")+"mupen64plus-video-glide64mk2");
 		}
 
+		bool stretch = stretchVideo();
+        int w = emuWidth();
+        int h = emuHeight();
+        use_overlay = false;
+        use_hdmi = false;
+        dbg_fps = showFPS();
+        q10_rotate = false;
+        if (m_hdmiInfo && m_hdmiInfo->isAttached())
+        {
+            if (m_useHdmi)
+            {
+                if (hdmi1080())
+                {
+                    w = m_hdmiInfo->pixelSize().width();
+                    h = m_hdmiInfo->pixelSize().height();
+                }
+                else
+                {
+                    switch (hdmiResolution())
+                    {
+                    case 1:
+                        w = 320;
+                        h = 240;
+                        break;
+                    case 2:
+                        w = 640;
+                        h = 480;
+                        break;
+                    case 3:
+                        w = 720;
+                        h = 720;
+                        break;
+                    case 4:
+                        w = 960;
+                        h = 720;
+                        break;
+                    case 5:
+                        w = 1280;
+                        h = 720;
+                        break;
+                    case 6:
+                        w = 1280;
+                        h = 768;
+                        break;
+                    default:
+                        w = 256;
+                        h = 224;
+                        break;
+                    }
+                }
+                hdmi_width = w;
+                hdmi_height = h;
+                use_hdmi = true;
+                stretch = true;
+            }
+        }
+        for (int i = 0; i < 4; i++)
+        {
+            if (m64p->controller[i].present)
+            {
+                if (m64p->controller[i].device == -3)
+                {
+                    m_noTouchScreenControllers = false;
+                    if (emuWidth() != emuHeight())
+                    {
+                        if (m_useHdmi && m_hdmiInfo && m_hdmiInfo->isAttached())
+                            use_overlay = true;
+                        else
+                            stretch = true;
+                    }
+                }
+                else if (m64p->controller[i].device == -5)
+                {
+                    if (emuWidth() == emuHeight())
+                    {
+                        if (m_useHdmi && m_hdmiInfo && m_hdmiInfo->isAttached())
+                            use_overlay = true;
+                        else
+                            stretch = true;
+                        q10_rotate = true;
+                    }
+                }
+            }
+        }
+        emit touchScreenControllerCountChanged();
 		//screen resolution
-		std::ostringstream s;
+		std::ostringstream s, s3;
 		s << "Video-General[ScreenWidth]=";
-		s << emuWidth();
+        s3 << "gles2n64[screen width]=";
+		if (!mVideoPlugin && !stretch)
+        {
+            if (w == h)
+            {
+                s << w;
+                s3 << w;
+                margin_left = 0;
+            }
+            else
+            {
+                int wdth = ((double)h) * 1.3333333333333;
+                s << (int)wdth;
+                s3 << (int)wdth;
+                margin_left = (int)((((double)w) - wdth) / 2.0);
+                printf("margin_left = %d\n", margin_left);
+            }
+        }
+		else
+        {
+            margin_left = 0;
+            s << w;
+            s3 << w;
+        }
 		m64p->SetConfigParameter(s.str());
-		std::ostringstream s2;
+        m64p->SetConfigParameter(s3.str());
+		std::ostringstream s2, s4;
 		s2 << "Video-General[ScreenHeight]=";
-		s2 << emuHeight();
+        s4 << "gles2n64[screen height]=";
+		if (!mVideoPlugin && !stretch)
+		{
+            if (w == h)
+            {
+                double hght = ((double)w) * 0.75;
+                s2 << (int)hght;
+                s4 << (int)hght;
+                margin_bottom = (int)((((double)h) - hght) / 2.0);
+            }
+            else
+            {
+                s2 << h;
+                s4 << h;
+                margin_bottom = 0;
+            }
+		}
+		else
+		{
+            margin_bottom = 0;
+		    s2 << h;
+            s4 << h;
+		}
 		m64p->SetConfigParameter(s2.str());
+        m64p->SetConfigParameter(s4.str());
+
+        emit rotationChanged();
 
 		m_emuRunning = true;
 
@@ -562,8 +747,12 @@ void Frontend::onThumbnail()
 {
 	if (m_emuRunning)
 	{
-		int width = this->width();
-		int height = this->height();
+		int width = hdmi_width;
+		int height = hdmi_height;
+		if (width < 0)
+		    width = this->width();
+		if (height < 0)
+		    height = this->height();
 		if (height > width) {
 			int temp = height;
 			height = width;
@@ -629,30 +818,44 @@ void Frontend::saveValueFor(const QString &objectName, const QString &inputValue
 {
     // A new value is saved to the application settings object.
     QSettings settings;
+    /*SystemToast *toast = new SystemToast();
+    toast->setBody(objectName + "=" + inputValue);
+    toast->show();*/
     settings.setValue(objectName, QVariant(inputValue));
 }
 
 //For input this will jsut update our controller struct. Else, we use QSettings for video.
 void Frontend::saveConfigValue(const QString &section, const QString &name, const QString &value)
 {
-	if(!section.contains("Input-SDL-Control")) {
+    if(!section.contains("Input-SDL-Control")) {
 		if(this->getValueFor("perRom", "true") == "true"){
-			this->saveValueFor(mRom.mid(mRom.lastIndexOf('/')+1) + name, value);
+		    if (mRom.isEmpty() || mRom.isNull()) {
+		        QString rom = QString(m_history->value(0)["location"].toString());
+		        this->saveValueFor(rom.mid(rom.lastIndexOf('/')+1) + name, value);
+		    }
+		    else
+                this->saveValueFor(mRom.mid(mRom.lastIndexOf('/')+1) + name, value);
 		} else {
 			this->saveValueFor(name, value);
 		}
 	}
 
-	m64p->SetConfigParameter((std::string)(section.toStdString() + "[" + name.toStdString() + "]=" + value.toStdString()));
+	if (!(QString::compare(section, "Video-Rice") == 0 && QString::compare(name, "stretchvideo") == 0))
+	    m64p->SetConfigParameter((std::string)(section.toStdString() + "[" + name.toStdString() + "]=" + value.toStdString()));
 }
 
 //For input this will jsut update our controller struct. Else, we use QSettings for video.
 QString Frontend::getConfigValue(const QString &rom, const QString &section, const QString &name, const QString &value)
 {
 	Q_UNUSED(rom);
-	if(!section.contains("Input-SDL-Control")) {
-		if(this->getValueFor("perRom", "true") == "true"){
-			return this->getValueFor(mRom.mid(mRom.lastIndexOf('/')+1) + name, value);
+    if(!section.contains("Input-SDL-Control")) {
+		if(this->getValueFor("perRom", "true") == "true") {
+            if (mRom.isEmpty() || mRom.isNull()) {
+                QString roms = QString(m_history->value(0)["location"].toString());
+                return this->getValueFor(roms.mid(roms.lastIndexOf('/')+1) + name, value);
+            }
+            else
+                return this->getValueFor(mRom.mid(mRom.lastIndexOf('/')+1) + name, value);
 		} else {
 			return this->getValueFor(name, value);
 		}
@@ -774,15 +977,19 @@ void Frontend::clearHistory()
 	emit hasHistoryChanged();
 }
 
-void Frontend::startEmulator(bool start_now)
+void Frontend::startEmulatorInternal()
 {
-	//start();
-	Q_UNUSED(start_now);
 	int msg = 1;
 	MsgSend(coid, &msg, sizeof(msg), NULL, 0);
-	QString goodname(m64p->l_RomName);
-	addToHistory(goodname);
-	return;
+	m_currentROM = QString(m64p->l_RomName);
+	emit currentROMChanged();
+	addToHistory(m_currentROM);
+}
+
+void Frontend::startEmulator(bool start_now)
+{
+	Q_UNUSED(start_now);
+	QTimer::singleShot(0, this, SLOT(startEmulatorInternal()));
 }
 
 //Getters and Setters
@@ -800,6 +1007,13 @@ void Frontend::setRom(QString i)
 
 void Frontend::LoadRom()
 {
+	m64p->LoadRom();
+}
+
+void Frontend::loadLastROM()
+{
+	mRom = QString(m_history->value(0)["location"].toString());
+	m64p->SetRom(mRom.toAscii().constData());
 	m64p->LoadRom();
 }
 
@@ -1000,12 +1214,20 @@ int Frontend::getInputValue(int player, QString value){
 	if(value == "layout") {
 		return m64p->controller[player].layout;
 	}
+	if (value == "plugin") {
+		return m64p->controller[player].plugin;
+	}
 	if (value == "controller") {
 	}
 
 	for(i = 0; i < 16; ++i) {
 		if(button_names[i] == value) {
 			return m64p->controller[player].button[i];
+		}
+	}
+	for (i = 0; i < 4; i++) {
+		if (button_names[i + 18] == value) {
+			return m64p->controller[player].diagonals[i];
 		}
 	}
 
@@ -1280,6 +1502,12 @@ void Frontend::setInputValue(int player, QString button, int value){
 			return;
 		}
 	}
+	for (i = 0; i < 4; i++) {
+		if (button_names[i + 18] == button) {
+			m64p->controller[player].diagonals[i] = value;
+			return;
+		}
+	}
 
 	if(button == "X Axis Left"){
 		m64p->controller[player].axis[0].a = value;
@@ -1528,6 +1756,12 @@ void Frontend::onBoxArtRecieved(const QString &info, bool success)
 		//qDebug() << "URL: " << games["baseImgUrl"];
 		url.append(games["baseImgUrl"].toString());
 
+		if (!games.contains("Game"))
+		{
+	        m_boxartLoaded = true;
+	        emit boxartLoadedChanged(m_boxartLoaded);
+		}
+
 		//IF there is one game, games["game"] will be a map rather than list
 		QVariantList game = games["Game"].toList();
 
@@ -1729,7 +1963,7 @@ void Frontend::onCreateOption(QString name, QUrl imageSource)
 
 void Frontend::detectHDMI()
 {
-	/*int hdmi = DisplayInfo::secondaryDisplayId();
+	int hdmi = DisplayInfo::secondaryDisplayId();
 	if (hdmi >= 0)
 	{
 		m_hdmiInfo = new DisplayInfo(hdmi, this);
@@ -1740,13 +1974,46 @@ void Frontend::detectHDMI()
 			emit hdmiDetected(true);
 			connect(m_hdmiInfo, SIGNAL(attachedChanged(bool)), this, SIGNAL(hdmiDetected(bool)));
 		}
-	}*/
+	}
 }
 
 void Frontend::onInvoke(const bb::system::InvokeRequest& request)
 {
-	QString file = request.uri().toString();
-	if (file.startsWith("file://"))
-		file = file.mid(7);
-	emit invoked(file);
+	QString target = request.target();
+	if (QString::compare(target, "com.emulator.mupen64p.application") == 0)
+	{
+		QString file = request.uri().toString();
+		if (file.startsWith("file://"))
+			file = file.mid(7);
+		emit invoked(file, false);
+	}
+	else if (QString::compare(target, "com.emulator.mupen64p.runnow") == 0)
+	{
+		QString file = request.uri().toString();
+		if (file.startsWith("n64://"))
+			file = file.mid(6);
+		emit invoked(file, true);
+	}
+}
+
+bool Frontend::createShortcut(const QString& name, const QString& icon, const QString& location)
+{
+	fprintf(stderr, "Shortcut: %s, %s, %s\n", name.toAscii().data(), icon.toAscii().data(), location.toAscii().data());
+	HomeScreen homeScreen;
+	bool result = homeScreen.addShortcut(QUrl(icon), name, QUrl("n64://" + location));
+	if (!result)
+	{
+		SystemToast *toast = new SystemToast();
+		toast->setBody("Error creating shortcut");
+		toast->show();
+	}
+	return result;
+}
+
+bool Frontend::isValidFilename(const QString &filename)
+{
+	static QRegExp reg("([^A-Za-z0-9_\\-\\.\\s\\+\\(\\)\\[\\]])");
+	if (filename.length() == 0 || filename.length() > 20)
+		return false;
+	return reg.indexIn(filename) < 0;
 }
