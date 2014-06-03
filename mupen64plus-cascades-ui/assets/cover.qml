@@ -22,4 +22,18 @@ Container {
             _frontend.coverImageChanged.connect(updateImage)
         }
     }
+    Container {
+        horizontalAlignment: HorizontalAlignment.Fill
+        verticalAlignment: VerticalAlignment.Bottom
+        background: Color.create("#8b000000")
+        visible: _frontend.currentROM.length > 0
+        Label {
+            horizontalAlignment: HorizontalAlignment.Center
+            verticalAlignment: VerticalAlignment.Bottom
+            text: _frontend.currentROM
+            textStyle.color: Color.White
+            textStyle.fontSize: FontSize.Small
+            multiline: true
+        }
+    }
 }
