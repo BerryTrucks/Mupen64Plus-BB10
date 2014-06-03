@@ -3,6 +3,8 @@ import bb.cascades 1.0
 Sheet {
     id: historySheet
     
+    property bool loading: false
+    
     signal loadROM(string path)
     signal playROM(string path)
     
@@ -11,7 +13,8 @@ Sheet {
 	        title: qsTr("History")
 	        dismissAction: ActionItem {
 	            title: qsTr("Cancel")
-	            
+	            enabled: !loading
+
 	            onTriggered: {
 	                historySheet.close()
 	            }
@@ -86,6 +89,15 @@ Sheet {
                                                 _itemContainer.ListItem.view.play(ListItemData.location)
                                             }
                                         },
+                                        ActionItem {
+                                            id: shortcutAction
+                                            title: qsTr("Create Shortcut")
+                                            imageSource: "asset:///images/ic_add_home.png"
+                                            
+                                            onTriggered: {
+                                                _itemContainer.ListItem.view.createShortcut(ListItemData.name, ListItemData.location, ListItemData.resource)
+                                            }
+                                        },
                                         DeleteActionItem {
                                             onTriggered: {
                                                 _itemContainer.ListItem.view.remove(ListItemData.uuid)
@@ -99,8 +111,8 @@ Sheet {
 	            ]
 
                 function play(location) {
-                    historySheet.close()
-	                playROM(location)
+                    loading = true
+                    _frontend.invokePlayHistoryROM(location)
 	            }
 	            
 	            function remove(uuid) {
@@ -108,11 +120,58 @@ Sheet {
 	            }
 
                 onTriggered: {
-                    historySheet.close()
-	                var selectedItem = dataModel.data(indexPath)
-	                loadROM(selectedItem.location)
+                    loading = true
+                    var selectedItem = dataModel.data(indexPath)
+                    _frontend.invokeLoadHistoryROM(selectedItem.location)
 	            }
+                
+                function playHistoryROM(rom) {
+                    playROM(rom)
+                    historySheet.close()
+                }
+                
+                function loadHistoryROM(rom) {
+                    loadROM(rom)
+                    historySheet.close()
+                }
+                
+                function createShortcut(name, location, icon) {
+                    var sheet = shortcutSheet.createObject()
+                    sheet.title = name
+                    sheet.location = location
+                    sheet.defaultIcon = icon
+                    sheet.open()
+                }
+                
+                onCreationCompleted: {
+                    _frontend.playHistoryROM.connect(playHistoryROM)
+                    _frontend.loadHistoryROM.connect(loadHistoryROM)
+                }
+                
+                attachedObjects: [
+                    ComponentDefinition {
+                        id: shortcutSheet
+                        source: "shortcut.qml"
+                    }
+                ]
 	        }
+            
+            Container {
+                horizontalAlignment: HorizontalAlignment.Fill
+                verticalAlignment: VerticalAlignment.Fill
+                background: Color.create("#74000000")
+                visible: loading
+
+                layout: DockLayout {
+                }
+                ActivityIndicator {
+                    running: loading
+                    minWidth: 200.0
+                    minHeight: 200.0
+                    verticalAlignment: VerticalAlignment.Center
+                    horizontalAlignment: HorizontalAlignment.Center
+                }
+            }
 	    }
 	}
 }
