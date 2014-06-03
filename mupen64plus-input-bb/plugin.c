@@ -32,7 +32,9 @@
 #include <bps/navigator.h>
 #include <bps/screen.h>
 #include <bps/bps.h>
+#include <bps/vibration.h>
 
+#include "bbutil.h"
 #include "m64p_types.h"
 #include "m64p_plugin.h"
 #include "m64p_config.h"
@@ -395,8 +397,6 @@ EXPORT void CALL ControllerCommand(int Control, unsigned char *Command)
             if (controller[Control].control->Plugin == PLUGIN_RAW)
             {
                 unsigned int dwAddress = (Command[3] << 8) + (Command[4] & 0xE0);
-              if (dwAddress == PAK_IO_RUMBLE && *Data)
-                    DebugMessage(M64MSG_VERBOSE, "Triggering rumble pack.");
 #ifdef __linux__
                 struct input_event play;
                 if( dwAddress == PAK_IO_RUMBLE && controller[Control].event_joystick != 0)
@@ -421,6 +421,14 @@ EXPORT void CALL ControllerCommand(int Control, unsigned char *Command)
                             perror("Error stopping rumble effect");
                     }
                 }
+#elif defined(__QNXNTO__)
+				if (dwAddress == PAK_IO_RUMBLE)
+				{
+					if (*Data)
+						vibration_request(VIBRATION_INTENSITY_LOW, 1000);
+					else
+						vibration_request(0, 0);
+				}
 #endif //__linux__
                 Data[32] = DataCRC( Data, 32 );
             }
@@ -566,7 +574,6 @@ void PB_HandleEvents(){
 *******************************************************************/
 EXPORT void CALL GetKeys( int Control, BUTTONS *Keys )
 {
-
 	//printf("Apply Touch Input\n");fflush(stdout);
 	PB_HandleEvents();
 	ApplyTouchInput(&controller[0],button_bits);
@@ -703,6 +710,9 @@ static void InitiateRumble(int cntrl)
     ioctl(controller[cntrl].event_joystick, EVIOCSFF, &ffweak[cntrl]);
 
     DebugMessage(M64MSG_INFO, "Rumble activated on N64 joystick #%i", cntrl + 1);
+#elif defined(__QNXNTO__)
+	if (controller[cntrl].control->Plugin == PLUGIN_RAW && (controller[cntrl].device == -3 || controller[cntrl].device == -2 || controller[cntrl].device == -5))
+		controller[cntrl].event_joystick = 1;
 #endif /* __linux__ */
 }
 
@@ -850,10 +860,12 @@ EXPORT int CALL RomOpen(void)
     //PDL_SetKeyboardState(PDL_TRUE);
 
     //Need set render callback to draw overlay
-	if(CoreDoCommand && CoreDoCommand(M64CMD_SET_FRAME_CALLBACK,0,touch_video_plugin_render_callback) != M64ERR_SUCCESS)
-	{
-		DebugMessage(M64MSG_INFO,"Couldn't set overlay callback using CoreDoCommand, controller overlay unavailable.");
-	}
+	//if(CoreDoCommand && CoreDoCommand(M64CMD_SET_FRAME_CALLBACK,0,touch_video_plugin_render_callback) != M64ERR_SUCCESS)
+	//{
+	//	DebugMessage(M64MSG_INFO,"Couldn't set overlay callback using CoreDoCommand, controller overlay unavailable.");
+	//}
+	touch_overlay_callback = touch_video_plugin_render_callback;
+	
 
 
 	InitTouchInput();

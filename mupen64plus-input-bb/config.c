@@ -58,7 +58,11 @@ static const char *button_names[] = {
     "Mempak switch",
     "Rumblepak switch",
     "X Axis",       // X_AXIS
-    "Y Axis"        // Y_AXIS
+    "Y Axis",       // Y_AXIS
+	"Up Left",
+	"Up Right",
+	"Down Left",
+	"Down Right"
 };
 
 
@@ -109,6 +113,10 @@ static void clear_controller(int iCtrlIdx)
         controller[iCtrlIdx].axis[b].hat_pos_a = -1;
         controller[iCtrlIdx].axis[b].hat_pos_b = -1;
     }
+	for (b = 0; b < 4; b++)
+	{
+		controller[iCtrlIdx].diagonals[b] = 0;
+	}
 }
 
 static int load_controller_config(const char *SectionName, int i)
@@ -222,6 +230,17 @@ static int load_controller_config(const char *SectionName, int i)
                 controller[i].axis[axis_idx].hat_pos_b = get_hat_pos_by_name(value2_str);
             }
         }
+		for (j = 0; j < 4; j++)
+		{
+			if (ConfigGetParameter(pConfig, button_names[18 + j], M64TYPE_STRING, input_str, 256) == M64ERR_SUCCESS)
+			{
+				if ((config_ptr = strstr(input_str, "key")) != NULL)
+				{
+					if (sscanf(config_ptr, "key(%i)", (int*)&controller[i].diagonals[j]) != 1)
+						DebugMessage(M64MSG_WARNING, "parsing error in key() parameter of diagonal '%s', for controller %i", button_names[18 + j], i + 1);
+				}
+			}
+		}
     }
 
     return readOK;
@@ -341,7 +360,20 @@ void save_controller_config(int iCtrlIdx)
             ParamString[len-1] = 0;
         ConfigSetDefaultString(pConfig, button_names[X_AXIS + j], ParamString, Help);
     }
-
+	for (j = 0; j < 4; j++)
+	{
+		if (controller[iCtrlIdx].diagonals[j] > 0)
+		{
+			ParamString[0] = 0;
+			int len = 0;
+			sprintf(Param, "key(%i)", controller[iCtrlIdx].diagonals[j]);
+			strcat(ParamString, Param);
+			len = strlen(ParamString);
+			if (len > 0 && ParamString[len-1] == ' ')
+				ParamString[len-1] = 0;
+			ConfigSetDefaultString(pConfig, button_names[18 + j], ParamString, "");
+		}
+	}
 }
 
 /* The reason why the architecture of this config-handling code is so wacky is that it tries to balance
@@ -429,7 +461,7 @@ void load_configuration(int bPrintSummary)
     joy_found = 0, joy_plugged = 0;
     for (i = 0; i < 4; i++)
     {
-        if (controller[i].device >= 0 || controller[i].device == DEVICE_NOT_JOYSTICK || controller[i].device == -3 || controller[i].device == -4)
+        if (controller[i].device >= 0 || controller[i].device == DEVICE_NOT_JOYSTICK || controller[i].device == -3 || controller[i].device == -4 || controller[i].device == -5)
         {
             joy_found++;
             if (controller[i].control->Present)

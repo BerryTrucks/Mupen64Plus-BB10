@@ -39,9 +39,10 @@ enum TouchOverlayMode
 };
 
 typedef enum {
-	OVERLAY_DEFAULT,
-	OVERLAY_ALT,
-	OVERLAY_NONE
+	OVERLAY_NONE = 0,
+	OVERLAY_DEFAULT = 1,
+	OVERLAY_ALT = 2,
+	OVERLAY_FULL = 3
 }overlay_t;
 
 extern overlay_t overlay_next;

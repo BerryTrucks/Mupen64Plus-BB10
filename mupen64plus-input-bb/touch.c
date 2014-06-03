@@ -43,7 +43,7 @@ int overlayCount = 0;
 char** availableOverlays;
 overlay_t overlay_current;
 
-char * overlays[3];
+char * overlays[5];
 
 void LoadOverlay(char* name)
 {
@@ -68,7 +68,10 @@ void LoadOverlay(char* name)
 	printf("\nLoading Overlay Key...\n");fflush(stdout);
 
 	char * s_width;
-	if(width == 1280){
+	if (overlay_request == 4){
+		printf("Width 720 detected...\n");fflush(stdout);
+		s_width = strdup("720");
+	}else if(width == 1280){
 		printf("Width 1280 detected...\n");fflush(stdout);
 		s_width = strdup("1280");
 	}else{
@@ -89,7 +92,10 @@ void LoadOverlay(char* name)
 	overlayQuad = create_image(tmp, 0, 0, 0);
 	if(overlayQuad != NULL) {
 		overlayQuad->text = strdup(name);
-		overlayQuad->scale = 1.25f;
+		if (overlay_request != 3)
+			overlayQuad->scale = 1.25f;
+		else
+			overlayQuad->scale = 1.40625f;
 	}
 	
 
@@ -177,6 +183,8 @@ void InitTouchInput()
 		overlays[0] = "None";
 		overlays[1] = "Default";
 		overlays[2] = "Alternate";
+		overlays[3] = "Fullscreen";
+		overlays[4] = "Keyboard";
 
 		LoadOverlay(overlays[overlay_request]);
 		overlay_current = overlay_request;
@@ -329,25 +337,32 @@ int UseAccelerometer()
 
 void ApplyTouchInput(SController* controller,unsigned short* button_bits)
 {
-	if(touchStick.finger != 0) //Apply touch input
+	int j;
+	for (j = 0; j < 4; j++)
 	{
-		//printf("Apply stick...\n");
-		controller->buttons.X_AXIS = (int)touchStick.xPos;
-		controller->buttons.Y_AXIS = -(int)touchStick.yPos;
-	}
-	else //Read accelerometer input for display
-	{
-		touchStick.xPos = controller->buttons.X_AXIS;
-		touchStick.yPos = controller->buttons.Y_AXIS;
-	}
-
-	int i;
-	for(i=0;i < (sizeof(touchButtons)/sizeof(touchButtons[0]));i++)
-	{
-		if(touchButtons[i].finger != 0)
+		if (!controller[j].control->Present || (controller[j].device != -3 && controller[j].device != -5)) {
+			continue;
+		}
+		if(touchStick.finger != 0) //Apply touch input
 		{
-			//printf("Apply Button...\n");
-		    controller->buttons.Value |= button_bits[touchButtons[i].button];
+			//printf("Apply stick...\n");
+			controller[j].buttons.X_AXIS = (int)touchStick.xPos;
+			controller[j].buttons.Y_AXIS = -(int)touchStick.yPos;
+		}
+		else //Read accelerometer input for display
+		{
+			touchStick.xPos = controller[j].buttons.X_AXIS;
+			touchStick.yPos = controller[j].buttons.Y_AXIS;
+		}
+
+		int i;
+		for(i=0;i < (sizeof(touchButtons)/sizeof(touchButtons[0]));i++)
+		{
+			if(touchButtons[i].finger != 0)
+			{
+				//printf("Apply Button...\n");
+				controller[j].buttons.Value |= button_bits[touchButtons[i].button];
+			}
 		}
 	}
 	fflush(stdout);

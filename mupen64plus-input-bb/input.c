@@ -11,6 +11,8 @@ unsigned int inputButtons[4][16];
 
 InputStick inputStick[4];
 
+int joyX, joyY;
+
 //TODO: remove SDL
 //TODO: add https://github.com/blackberry/NDK-Samples/tree/master/Gamepad
 void ProcessKeyboardEvent(screen_event_t *event,SController* controller,unsigned short* button_bits) {
@@ -74,16 +76,32 @@ void ProcessKeyboardEvent(screen_event_t *event,SController* controller,unsigned
 				if( controller[c].axis[b].key_a == keysym.sym){
 					if(flags & KEY_DOWN){
 						axis_val = -axis_max_val;
+						if (b == 0)
+							joyX = axis_val;
+						else
+							joyY = axis_val;
 					} else {
 						axis_val = 0;
+						if (b == 0)
+							joyX = 0;
+						else
+							joyY = 0;
 					}
 				}
 			if( controller[c].axis[b].key_b != SDLK_UNKNOWN && ((int) controller[c].axis[b].key_b) > 0)
 				if( controller[c].axis[b].key_b == keysym.sym ){
 					if(flags & KEY_DOWN){
 						axis_val = axis_max_val;
+						if (b == 0)
+							joyX = axis_val;
+						else
+							joyY = axis_val;
 					} else {
 						axis_val = 0;
+						if (b == 0)
+							joyX = 0;
+						else
+							joyY = 0;
 					}
 				}
 
@@ -93,6 +111,61 @@ void ProcessKeyboardEvent(screen_event_t *event,SController* controller,unsigned
 			else{
 				inputStick[c].y = axis_val;
 			}
+		}
+		{
+			int x_axis, y_axis;
+			x_axis = inputStick[c].x;
+			y_axis = inputStick[c].y;
+			if (controller[c].diagonals[0] == keysym.sym) {
+				if (flags & KEY_DOWN)
+				{
+					x_axis = -axis_max_val;
+					y_axis = -axis_max_val;
+				}
+				else
+				{
+					x_axis = joyX;
+					y_axis = joyY;
+				}
+			}
+			else if (controller[c].diagonals[1] == keysym.sym) {
+				if (flags & KEY_DOWN)
+				{
+					x_axis = axis_max_val;
+					y_axis = -axis_max_val;
+				}
+				else
+				{
+					x_axis = joyX;
+					y_axis = joyY;
+				}
+			}
+			else if (controller[c].diagonals[2] == keysym.sym) {
+				if (flags & KEY_DOWN)
+				{
+					x_axis = -axis_max_val;
+					y_axis = axis_max_val;
+				}
+				else
+				{
+					x_axis = joyX;
+					y_axis = joyY;
+				}
+			}
+			else if (controller[c].diagonals[3] == keysym.sym) {
+				if (flags & KEY_DOWN)
+				{
+					x_axis = axis_max_val;
+					y_axis = axis_max_val;
+				}
+				else
+				{
+					x_axis = joyX;
+					y_axis = joyY;
+				}
+			}
+			inputStick[c].x = x_axis;
+			inputStick[c].y = y_axis;
 		}
 	}
 }
@@ -164,6 +237,9 @@ void InitKeyboard(){
 			inputButtons[i][j] = 0;
 		}
 	}
+	
+	joyX = 0;
+	joyY = 0;
 }
 
 int TranslateBluetoothKeyboard(int sym, int mods, int flags, int scan, int cap, SDL_keysym *keysym)
@@ -204,13 +280,17 @@ void ApplyInputButtons(SController* controller,unsigned short* button_bits){
 
 	int i, j;
 	for(j=0;j<4;++j){
+		if (!controller[j].control->Present || (controller[j].device != -2 && controller[j].device != -5))
+			continue;
 
-		if((j == 0) && (touchStick.finger != 0)){
+		if(controller[j].device != -5 && (j == 0) && (touchStick.finger != 0)){
 			return;
 		}
 
-		controller[j].buttons.X_AXIS = inputStick[j].x;
-		controller[j].buttons.Y_AXIS = -inputStick[j].y;
+		if (controller[j].device != -5) {
+			controller[j].buttons.X_AXIS = inputStick[j].x;
+			controller[j].buttons.Y_AXIS = -inputStick[j].y;
+		}
 
 		for(i=0;i<16;i++)
 		{
