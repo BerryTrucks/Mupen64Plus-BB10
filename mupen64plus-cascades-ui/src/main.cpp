@@ -30,21 +30,50 @@ using namespace bb::system;
 
 bool debug_mode = false;
 ActiveFrame* sceneCover;
+QSettings *m_settings;
 
 Q_DECL_EXPORT int main(int argc, char **argv)
 {
-	struct stat buf;
-	int theme = 0;
-	if (!stat("data/bright.dat", &buf))
-	{
-		setenv("CASCADES_THEME", "bright", 1);
-		theme = 2;
-	}
-	else if (!stat("data/dark.dat", &buf))
-	{
-		setenv("CASCADES_THEME", "dark", 1);
-		theme = 1;
-	}
+    m_settings = new QSettings("emulators", "mupen64p");
+    QString themeString;
+    int id = m_settings->value("THEME", -1).toInt();
+    if (id == 1)
+        themeString = "dark";
+    else if (id == 0)
+        themeString = "bright";
+    else
+    {
+        struct stat buf;
+        if (!stat("data/bright.dat", &buf))
+        {
+            m_settings->setValue("THEME", 0);
+            remove("data/bright.dat");
+            themeString = "bright";
+        }
+        else if (!stat("data/dark.dat", &buf))
+        {
+            m_settings->setValue("THEME", 1);
+            remove("data/dark.dat");
+            themeString = "dark";
+        }
+        else
+            themeString = "default";
+    }
+    if (m_settings->value("PRIMARY_COLOUR_INDEX", 1).toInt())
+    {
+        themeString += "?primaryColor=0x";
+        themeString += ("00" + QString::number(m_settings->value("PRIMARY_COLOUR_R", 255).toInt() & 0xFF, 16).toUpper()).right(2);
+        themeString += ("00" + QString::number(m_settings->value("PRIMARY_COLOUR_G", 0).toInt() & 0xFF, 16).toUpper()).right(2);
+        themeString += ("00" + QString::number(m_settings->value("PRIMARY_COLOUR_B", 0).toInt() & 0xFF, 16).toUpper()).right(2);
+        if (m_settings->value("BASE_COLOUR_INDEX", 0).toInt())
+        {
+            themeString += "&amp;primaryBase=0x";
+            themeString += ("00" + QString::number(m_settings->value("BASE_COLOUR_R", 0).toInt() & 0xFF, 16).toUpper()).right(2);
+            themeString += ("00" + QString::number(m_settings->value("BASE_COLOUR_G", 0).toInt() & 0xFF, 16).toUpper()).right(2);
+            themeString += ("00" + QString::number(m_settings->value("BASE_COLOUR_B", 255).toInt() & 0xFF, 16).toUpper()).right(2);
+        }
+    }
+    setenv("CASCADES_THEME", themeString.toAscii().data(), 1);
 	int rc;
     // Call the main application constructor.
     Application app(argc, argv);
@@ -62,7 +91,7 @@ Q_DECL_EXPORT int main(int argc, char **argv)
     InvokeManager* manager = new InvokeManager();
 
     // Create the application.
-    Frontend mainApp(theme);
+    Frontend mainApp;
     sceneCover = new ActiveFrame(&mainApp);
     app.setCover(sceneCover);
 
