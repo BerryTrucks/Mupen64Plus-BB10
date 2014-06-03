@@ -9,7 +9,7 @@ Container {
     signal clicked()
     
     preferredHeight: 140.0
-    preferredWidth: _frontend.Keyboard ? 144.0 : 256.0
+    preferredWidth: _frontend.emuWidth / _frontend.numMenuItems
     verticalAlignment: VerticalAlignment.Fill
     Container {
         preferredHeight: 4.0
@@ -56,6 +56,19 @@ Container {
         }
         else if (event.touchType == TouchType.Down) {
             mupenMenuItem.pressed = true
+        }
+    }
+    
+    onCreationCompleted: {
+        _frontend.addMupenMenuItem()
+    }
+    
+    onVisibleChanged: {
+        if (visible) {
+            _frontend.addMupenMenuItem()
+        }
+        else {
+            _frontend.removeMupenMenuItem()
         }
     }
 }
