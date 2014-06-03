@@ -57,11 +57,16 @@ const char *button_names[] = {
     "Mempak switch",
     "Rumblepak switch",
     "X Axis",       // X_AXIS
-    "Y Axis"        // Y_AXIS
+    "Y Axis",        // Y_AXIS
+	"Up Left",
+	"Up Right",
+	"Down Left",
+	"Down Right"
 };
 
 /** global variables **/
 int    g_Verbose = 0;
+static int current_overlay;
 
 /** static (local) variables **/
 static m64p_handle l_ConfigCore = NULL;
@@ -112,9 +117,11 @@ Emulator::Emulator(char * groupId, char * windowId){
 	g_RspPlugin = NULL;
 
     /* load the Mupen64Plus core library */
-    if (AttachCoreLib(l_CoreLibPath) != M64ERR_SUCCESS){
+    if (AttachCoreLib(l_CoreLibPath) != M64ERR_SUCCESS) {
+        fprintf(stderr, "UI-console: AttachCoreLib failed\n");
         return;
     }
+    fprintf(stderr, "UI-console: AttachCoreLib succeeded\n");
 
     /* start the Mupen64Plus core library, load the configuration file */
     m64p_error rval = (*CoreStartup)(CONSOLE_API_VERSION, l_ConfigDirPath, l_DataDirPath, (void*)"Core", DebugCallback, NULL, NULL);
@@ -124,6 +131,7 @@ Emulator::Emulator(char * groupId, char * windowId){
         DetachCoreLib();
         return;
     }
+    fprintf(stderr, "UI-console: started Mupen64Plus core library.\n");
 
     /* Open configuration sections */
     rval = OpenConfigurationHandles();
@@ -317,6 +325,7 @@ int Emulator::LoadRom(){
 
 int Emulator::Start(){
 	int rc = -1;
+    current_overlay = overlay_request;
 
 
 	if(bbutil_init_egl(screen_cxt, g_groupId, g_windowId) != 0){
@@ -381,12 +390,13 @@ int Emulator::Start(){
 		return 12;
 	}
 
+	int err;
 	/* attach plugins to core */
 	for (int i = 0; i < 4; i++)
 	{
-		if ((*CoreAttachPlugin)(g_PluginMap[i].type, g_PluginMap[i].handle) != M64ERR_SUCCESS)
+		if ((err = (*CoreAttachPlugin)(g_PluginMap[i].type, g_PluginMap[i].handle)) != M64ERR_SUCCESS)
 		{
-			fprintf(stderr, "UI-Console: error from core while attaching %s plugin.\n", g_PluginMap[i].name);
+			fprintf(stderr, "UI-Console: error %d from core while attaching %s plugin.\n", err, g_PluginMap[i].name);
 			(*CoreDoCommand)(M64CMD_ROM_CLOSE, 0, NULL);
 			(*CoreShutdown)();
 			DetachCoreLib();
@@ -409,6 +419,8 @@ int Emulator::Start(){
 	/* close the ROM image */
 	(*CoreDoCommand)(M64CMD_ROM_CLOSE, 0, NULL);
 	printf("Closed Rom...\n");fflush(stdout);
+
+	bbutil_terminate();
 
 	/* Shut down and release the Core library */
 	//(*CoreShutdown)();
@@ -588,6 +600,10 @@ int Emulator::init_controller_config() {
 		controller[i].mouse = 0;
 		controller[i].layout = 1;
 
+		for (j = 0; j < 4; j++)
+		{
+			controller[i].diagonals[j] = -1;
+		}
 		for(j=0; j<16; ++j){
 			controller[i].button[j] = -1;
 		}
@@ -614,6 +630,10 @@ int Emulator::print_controller_config() {
 		fprintf(stderr, "Mouse: %d\n", controller[i].mouse);
 		fprintf(stderr, "Layout: %d\n", controller[i].layout);
 
+		for (j = 0; j < 4; j++)
+		{
+			fprintf(stderr, "Diagonal %d: %d\n", j, controller[i].diagonals[j]);
+		}
 		for(j=0; j<16; ++j){
 			fprintf(stderr, "Button %d: %d\n", j, controller[i].button[j]);
 		}
@@ -631,7 +651,7 @@ int Emulator::print_controller_config() {
 
 int Emulator::load_controller_config(const char *SectionName, int i) {
     m64p_handle pConfig;
-    char input_str[256], value1_str[16], value2_str[16];
+    char input_str[256], value1_str[16];
     const char *config_ptr;
     int readOK, j;
 
@@ -678,67 +698,24 @@ int Emulator::load_controller_config(const char *SectionName, int i) {
             if ((config_ptr = strstr(input_str, "key")) != NULL)
                 if (sscanf(config_ptr, "key(%i)", (int *) &controller[i].button[j]) != 1)
                 	printf("parsing error in key() parameter of button '%s' for controller %i\n", button_names[j], i + 1);
-                    //DebugMessage(M64MSG_WARNING, "parsing error in key() parameter of button '%s' for controller %i", button_names[j], i + 1);
-            //if ((config_ptr = strstr(input_str, "button")) != NULL)
-                //if (sscanf(config_ptr, "button(%i)", &controller[i].button[j].button) != 1)
-                    //DebugMessage(M64MSG_WARNING, "parsing error in button() parameter of button '%s' for controller %i", button_names[j], i + 1);
-            //if ((config_ptr = strstr(input_str, "axis")) != NULL)
-            //{
-                //char chAxisDir;
-                //if (sscanf(config_ptr, "axis(%d%c,%d", &controller[i].button[j].axis, &chAxisDir, &controller[i].button[j].axis_deadzone) != 3 &&
-                    //sscanf(config_ptr, "axis(%i%c", &controller[i].button[j].axis, &chAxisDir) != 2)
-                    //DebugMessage(M64MSG_WARNING, "parsing error in axis() parameter of button '%s' for controller %i", button_names[j], i + 1);
-                //controller[i].button[j].axis_dir = (chAxisDir == '+' ? 1 : (chAxisDir == '-' ? -1 : 0));
-            //}
-            //if ((config_ptr = strstr(input_str, "hat")) != NULL)
-            //{
-                //char *lastchar = NULL;
-                //if (sscanf(config_ptr, "hat(%i %15s", &controller[i].button[j].hat, value1_str) != 2)
-                    //DebugMessage(M64MSG_WARNING, "parsing error in hat() parameter of button '%s' for controller %i", button_names[j], i + 1);
-                //value1_str[15] = 0;
-                /* chop off the last character of value1_str if it is the closing parenthesis */
-                //lastchar = &value1_str[strlen(value1_str) - 1];
-                //if (lastchar > value1_str && *lastchar == ')') *lastchar = 0;
-                //controller[i].button[j].hat_pos = get_hat_pos_by_name(value1_str);
-            //}
-            //if ((config_ptr = strstr(input_str, "mouse")) != NULL)
-                //if (sscanf(config_ptr, "mouse(%i)", &controller[i].button[j].mouse) != 1)
-                    //DebugMessage(M64MSG_WARNING, "parsing error in mouse() parameter of button '%s' for controller %i", button_names[j], i + 1);
         }
         /* load configuration for the 2 analog joystick axes */
         for (j = 0; j < 2; j++)
         {
-            //int axis_idx = j - 16;
             if (ConfigGetParameter(pConfig, button_names[j+16], M64TYPE_STRING, input_str, 256) != M64ERR_SUCCESS)
                 continue;
             if ((config_ptr = strstr(input_str, "key")) != NULL)
                 if (sscanf(config_ptr, "key(%i,%i)", (int *) &controller[i].axis[j].a, (int *) &controller[i].axis[j].b) != 2)
                 	printf("parsing error in key() parameter of axis '%s' for controller %i", button_names[j+16], i + 1);
-                    //DebugMessage(M64MSG_WARNING, "parsing error in key() parameter of axis '%s' for controller %i", button_names[j], i + 1);
-            //if ((config_ptr = strstr(input_str, "button")) != NULL)
-                //if (sscanf(config_ptr, "button(%i,%i)", &controller[i].axis[axis_idx].button_a, &controller[i].axis[axis_idx].button_b) != 2)
-                    //DebugMessage(M64MSG_WARNING, "parsing error in button() parameter of axis '%s' for controller %i", button_names[j], i + 1);
-            //if ((config_ptr = strstr(input_str, "axis")) != NULL)
-            //{
-                //char chAxisDir1, chAxisDir2;
-                //if (sscanf(config_ptr, "axis(%i%c,%i%c)", &controller[i].axis[axis_idx].axis_a, &chAxisDir1,
-                                                          //&controller[i].axis[axis_idx].axis_b, &chAxisDir2) != 4)
-                    //DebugMessage(M64MSG_WARNING, "parsing error in axis() parameter of axis '%s' for controller %i", button_names[j], i + 1);
-                //controller[i].axis[axis_idx].axis_dir_a = (chAxisDir1 == '+' ? 1 : (chAxisDir1 == '-' ? -1 : 0));
-                //controller[i].axis[axis_idx].axis_dir_b = (chAxisDir2 == '+' ? 1 : (chAxisDir2 == '-' ? -1 : 0));
-            //}
-            //if ((config_ptr = strstr(input_str, "hat")) != NULL)
-            //{
-                //char *lastchar = NULL;
-                //if (sscanf(config_ptr, "hat(%i %15s %15s", &controller[i].axis[axis_idx].hat, value1_str, value2_str) != 3)
-                    //DebugMessage(M64MSG_WARNING, "parsing error in hat() parameter of axis '%s' for controller %i", button_names[j], i + 1);
-                //value1_str[15] = value2_str[15] = 0;
-                /* chop off the last character of value2_str if it is the closing parenthesis */
-                //lastchar = &value2_str[strlen(value2_str) - 1];
-                //if (lastchar > value2_str && *lastchar == ')') *lastchar = 0;
-                //controller[i].axis[axis_idx].hat_pos_a = get_hat_pos_by_name(value1_str);
-                //controller[i].axis[axis_idx].hat_pos_b = get_hat_pos_by_name(value2_str);
-            //}
+        }
+        /* load configuration for the 4 diagonal directions */
+        for (j = 0; j < 4; j++)
+        {
+        	if (ConfigGetParameter(pConfig, button_names[18 + j], M64TYPE_STRING, input_str, 256) != M64ERR_SUCCESS)
+        		continue;
+        	if ((config_ptr = strstr(input_str, "key")) != NULL)
+        		if (sscanf(config_ptr, "key(%i)", (int*)&controller[i].diagonals[j]) != 1)
+        			printf("parsing error in key() parameter of diagonal '%s' for controller %i", button_names[j+18], i + 1);
         }
     }
     fflush(stdout);
@@ -767,14 +744,20 @@ void Emulator::save_controller_config(int iCtrlIdx)
     ConfigSetDefaultBool(pConfig, "plugged", controller[iCtrlIdx].present, "Specifies whether this controller is 'plugged in' to the simulated N64");
     ConfigSetDefaultInt(pConfig, "plugin", controller[iCtrlIdx].plugin, "Specifies which type of expansion pak is in the controller: 1=None, 2=Mem pak, 5=Rumble pak");
     ConfigSetDefaultBool(pConfig, "mouse", controller[iCtrlIdx].mouse, "If True, then mouse buttons may be used with this controller");
-    ConfigSetDefaultInt(pConfig, "device", controller[iCtrlIdx].device, "Specifies which joystick is bound to this controller: -3=TouchScreen, -2=Keyboard/mouse, -1=Auto config, 0 or more= SDL Joystick number");
+    ConfigSetDefaultInt(pConfig, "device", controller[iCtrlIdx].device, "Specifies which joystick is bound to this controller: -5=TouchScreen/Keyboard, -4=Gamepad, -3=TouchScreen, -2=Keyboard/mouse, -1=Auto config, 0 or more= SDL Joystick number");
     ConfigSetDefaultInt(pConfig, "layout", controller[iCtrlIdx].layout, "Specifies the initial touchscreen overlay used.");
     ConfigSetDefaultString(pConfig, "gamepadid", controller[iCtrlIdx].gamepadId, "The ID of the gamepad used for this controller.");
 
     //Touchscreen
-    if(controller[iCtrlIdx].device == -3){
-    	overlay_request = controller[iCtrlIdx].layout;
+    if(controller[iCtrlIdx].device == -3) {
+        if (controller[iCtrlIdx].present)
+            overlay_request = controller[iCtrlIdx].layout;
     	return;
+    }
+    //Touchscreen/Keyboard
+    else if (controller[iCtrlIdx].device == -5) {
+        if (controller[iCtrlIdx].present)
+            overlay_request = 4;
     }
 
     sprintf(Param, "%i,%i", controller[iCtrlIdx].analogDeadZone[0], controller[iCtrlIdx].analogDeadZone[1]);
@@ -793,38 +776,6 @@ void Emulator::save_controller_config(int iCtrlIdx)
             sprintf(Param, "key(%i) ", controller[iCtrlIdx].button[j]);
             strcat(ParamString, Param);
         }
-        /*
-        if (controller[iCtrlIdx].button[j].button >= 0)
-        {
-            sprintf(Param, "button(%i) ", controller[iCtrlIdx].button[j].button);
-            strcat(ParamString, Param);
-        }
-        */
-        /*
-        if (controller[iCtrlIdx].button[j].axis >= 0)
-        {
-            if (controller[iCtrlIdx].button[j].axis_deadzone >= 0)
-                sprintf(Param, "axis(%i%c,%i) ", controller[iCtrlIdx].button[j].axis, (controller[iCtrlIdx].button[j].axis_dir == -1) ? '-' : '+',
-                        controller[iCtrlIdx].button[j].axis_deadzone);
-            else
-                sprintf(Param, "axis(%i%c) ", controller[iCtrlIdx].button[j].axis, (controller[iCtrlIdx].button[j].axis_dir == -1) ? '-' : '+');
-            strcat(ParamString, Param);
-        }
-        */
-        /*
-        if (controller[iCtrlIdx].button[j].hat >= 0)
-        {
-            sprintf(Param, "hat(%i %s) ", controller[iCtrlIdx].button[j].hat, HAT_POS_NAME(controller[iCtrlIdx].button[j].hat_pos));
-            strcat(ParamString, Param);
-        }
-        */
-        /*
-        if (controller[iCtrlIdx].button[j].mouse >= 0)
-        {
-            sprintf(Param, "mouse(%i) ", controller[iCtrlIdx].button[j].mouse);
-            strcat(ParamString, Param);
-        }
-        */
         if (j == 0)
             Help = "Digital button configuration mappings";
         else
@@ -848,30 +799,6 @@ void Emulator::save_controller_config(int iCtrlIdx)
             sprintf(Param, "key(%i,%i) ", controller[iCtrlIdx].axis[j].a, controller[iCtrlIdx].axis[j].b);
             strcat(ParamString, Param);
         }
-        /*
-        if (controller[iCtrlIdx].axis[j].button_a >= 0 && controller[iCtrlIdx].axis[j].button_b >= 0)
-        {
-            sprintf(Param, "button(%i,%i) ", controller[iCtrlIdx].axis[j].button_a, controller[iCtrlIdx].axis[j].button_b);
-            strcat(ParamString, Param);
-        }
-        */
-        /*
-        if (controller[iCtrlIdx].axis[j].axis_a >= 0 && controller[iCtrlIdx].axis[j].axis_b >= 0)
-        {
-            sprintf(Param, "axis(%i%c,%i%c) ", controller[iCtrlIdx].axis[j].axis_a, (controller[iCtrlIdx].axis[j].axis_dir_a <= 0) ? '-' : '+',
-                                               controller[iCtrlIdx].axis[j].axis_b, (controller[iCtrlIdx].axis[j].axis_dir_b <= 0) ? '-' : '+' );
-            strcat(ParamString, Param);
-        }
-        */
-        /*
-        if (controller[iCtrlIdx].axis[j].hat >= 0)
-        {
-            sprintf(Param, "hat(%i %s %s) ", controller[iCtrlIdx].axis[j].hat,
-                                             HAT_POS_NAME(controller[iCtrlIdx].axis[j].hat_pos_a),
-                                             HAT_POS_NAME(controller[iCtrlIdx].axis[j].hat_pos_b));
-            strcat(ParamString, Param);
-        }
-        */
         if (j == 0)
             Help = "Analog axis configuration mappings";
         else
@@ -881,6 +808,27 @@ void Emulator::save_controller_config(int iCtrlIdx)
         if (len > 0 && ParamString[len-1] == ' ')
             ParamString[len-1] = 0;
         ConfigSetDefaultString(pConfig, button_names[16 + j], ParamString, Help);
+    }
+
+    /* save configuration for the 4 diagonal directions */
+    for (j = 0; j < 4; j++)
+    {
+    	const char* Help;
+    	int len = 0;
+    	ParamString[0] = 0;
+    	if (controller[iCtrlIdx].diagonals[j] > 0)
+    	{
+    		sprintf(Param, "key(%i)", controller[iCtrlIdx].diagonals[j]);
+    		strcat(ParamString, Param);
+    	}
+    	if (j == 0)
+    		Help = "Diagonal movement directions";
+    	else
+    		Help = NULL;
+    	len = strlen(ParamString);
+    	if (len > 0 && ParamString[len-1] == ' ')
+    		ParamString[len-1] = 0;
+    	ConfigSetDefaultString(pConfig, button_names[18 + j], ParamString, Help);
     }
 
     ConfigSaveFile();
@@ -896,13 +844,12 @@ void Emulator::LoadState(){
 	load = 1;
 }
 
-void Emulator::LoadTouchOverlay(){
-	static int current = 2;
-
-	overlay_request = current++;
-	if(current == 3){
-		current = 0;
+void Emulator::LoadTouchOverlay() {
+	current_overlay++;
+	if(current_overlay == 4) {
+	    current_overlay = 0;
 	}
+	overlay_request = current_overlay;
 }
 
 void Emulator::ExitEmulator(){
