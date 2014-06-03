@@ -194,38 +194,100 @@ Page {
             }
             
             Divider {}
+            
+            Container {
+                horizontalAlignment: HorizontalAlignment.Center
+                
+                layout: StackLayout {
+                    orientation: LayoutOrientation.LeftToRight
+                }
+                
+                Label {
+                    horizontalAlignment: HorizontalAlignment.Left
+                    verticalAlignment: VerticalAlignment.Center
+                    preferredWidth: 768
+                    text: "Show FPS"
+                }
+                
+                ToggleButton {
+                    id: showFPS
+                    horizontalAlignment: HorizontalAlignment.Right
+                    onCheckedChanged: {
+                        _frontend.showFPS = checked
+                    }
+                    onCreationCompleted: {
+                        checked = _frontend.showFPS
+                    }
+                }
+            }
+            
+            Label {
+                id: _help5
+                text: "Show a graph of the emulators frames per second."
+                multiline: true
+                visible: helpEnabled
+                textStyle {
+                    base: SystemDefaults.TextStyles.BodyText
+                    fontStyle: FontStyle.Italic
+                } 
+            }
+            
+            Divider {}
 	        
 	        Container {
-	            leftPadding: 15.0
-	            Label {
-	                text: qsTr("Default Theme")
-	                leftMargin: 15.0
-	            }
-	        }
-	        DropDown {
-	            horizontalAlignment: HorizontalAlignment.Center
-	            title: qsTr("Visual Theme")
-	            Option {
-	                text: qsTr("Bright")
-	            }
-	            Option {
-	                text: qsTr("Dark")
-	            }
-	            
-	            onSelectedIndexChanged: {
-	                _frontend.setBright(selectedIndex)
-	            }
-	            
-	            onCreationCompleted: {
-	                selectedIndex = _frontend.colorIndex
-	            }
-	        }
+	            visible: !_frontend.isOSThree
+    	        Container {
+    	            leftPadding: 15.0
+    	            Label {
+    	                text: qsTr("Default Theme")
+    	                leftMargin: 15.0
+    	            }
+    	        }
+    	        DropDown {
+    	            horizontalAlignment: HorizontalAlignment.Center
+    	            title: qsTr("Visual Theme")
+    	            Option {
+    	                text: qsTr("Bright")
+    	            }
+    	            Option {
+    	                text: qsTr("Dark")
+    	            }
+    	            
+    	            onSelectedIndexChanged: {
+    	                _frontend.setBright(selectedIndex)
+    	            }
+    	            
+    	            onCreationCompleted: {
+    	                selectedIndex = _frontend.colorIndex
+    	            }
+    	        }
+    	        Container {
+    	            leftPadding: 15.0
+    	            rightPadding: 15.0
+    	            Label {
+    	                text: qsTr("Restart the emulator for the colour theme change to take effect.")
+    	                multiline: true
+    	            }
+    	        }
+    	    }
 	        Container {
-	            leftPadding: 15.0
-	            rightPadding: 15.0
-	            Label {
-	                text: qsTr("Restart the emulator for the colour theme change to take effect.")
-	                multiline: true
+	            visible: _frontend.isOSThree
+	            horizontalAlignment: HorizontalAlignment.Fill
+	            Button {
+	                horizontalAlignment: HorizontalAlignment.Fill
+	                text: qsTr("Set Visual Style")
+	                
+	                onClicked: {
+	                    var sheet = themeSheet.createObject()
+	                    sheet.open()
+	                }
+	                
+	                attachedObjects: [
+	                    ComponentDefinition {
+	                        id: themeSheet
+	                        source: "theme.qml"
+	                    }
+	                ]
 	            }
 	        }
 	    }
