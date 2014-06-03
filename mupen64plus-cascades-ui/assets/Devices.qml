@@ -10,19 +10,17 @@ Container {
         Option {
             id: _disabled
             text: "Disabled"
-            selected: _frontend.getInputValue(player, "present") == 0
+            value: 0
         }
         Option {
-            text: "Touchscreen"
-            selected: !(_disabled.selected) && _frontend.getInputValue(player, "device") == -3
-        }
-        Option {
+            id: _keyboardindex
             text: "Keyboard"
-            selected: !(_disabled.selected) && _frontend.getInputValue(player, "device") == -2
+            value: -2
         }
         Option {
+            id: _gamepadindex
             text: "GamePad"
-            selected: !(_disabled.selected) && _frontend.getInputValue(player, "device") < -3
+            value: -4
         }
         
         onSelectedIndexChanged: {
@@ -30,20 +28,74 @@ Container {
                 _frontend.setInputValue(player, "present", 0);
                 deviceList.selectedIndex = 0
             } else {
-                if (selectedIndex == 1) {
+                var val = options[selectedIndex].value
+                if (val == -3) {
                     _frontend.setInputValue(player, "device", -3);
                     deviceList.selectedIndex = 0
-                } else if (selectedIndex == 2) {
+                    _skin.selectedIndex = 3
+                } else if (val == -2) {
                     _frontend.setInputValue(player, "device", -2);
                     deviceList.selectedIndex = 0
                     _skin.selectedIndex = 0
-                } else if (selectedIndex == 3) {
+                } else if (val == -4) {
                     _frontend.setInputValue(player, "device", -4);
                     _skin.selectedIndex = 0
+                } else if (val == -5) {
+                    _frontend.setInputValue(player, "device", -5);
+                    deviceList.selectedIndex = 0
+                    _skin.selectedIndex = 4
+                    _frontend.setInputValue(player, "X Axis Left", "")
+                    _frontend.setInputValue(player, "X Axis Right", "")
+                    _frontend.setInputValue(player, "Y Axis Up", "")
+                    _frontend.setInputValue(player, "Y Axis Down", "")
+                    _frontend.setInputValue(player, "Up Left", "")
+                    _frontend.setInputValue(player, "Up Right", "")
+                    _frontend.setInputValue(player, "Down Left", "")
+                    _frontend.setInputValue(player, "Down Right", "")
                 }
                 _frontend.setInputValue(player, "present", 1);
             }
-            
+        }
+        
+        attachedObjects: [
+            Option {
+                id: _touchkeyboard
+                text: "Touchscreen/Keyboard"
+                value: -5
+            },
+            Option {
+                id: _touchscreen
+                text: "Touchscreen"
+                value: -3
+            }
+        ]
+        
+        onCreationCompleted: {
+            if (_frontend.Keyboard) {
+                add(_touchkeyboard)
+            }
+            else {
+                insert(1, _touchscreen)
+            }
+            var present = _frontend.getInputValue(player, "present")
+            if (present == 0) {
+                _disabled.selected = true
+            }
+            else {
+                var index = _frontend.getInputValue(player, "device")
+                if (index == -2) {
+                    _keyboardindex.selected = true
+                }
+                else if (index == -3) {
+                    _touchscreen.selected = true
+                }
+                else if (index == -4) {
+                    _gamepadindex.selected = true
+                }
+                else if (index == -5) {
+                    _touchkeyboard.selected = true
+                }
+            }
         }
     }
     
@@ -52,7 +104,31 @@ Container {
 	//Touchscreen
 	Container {
 	    id:_touch
-	    visible: _device.selectedIndex == 1
+	    visible: _touchscreen.selected
+
+        Container {
+            layout: StackLayout {
+                orientation: LayoutOrientation.LeftToRight
+            }
+
+            Label {
+                text: qsTr("Rumble Pak")
+                preferredWidth: 768
+                verticalAlignment: VerticalAlignment.Center
+            }
+
+            ToggleButton {
+                id: toggle
+                checked:_frontend.getInputValue(player, "plugin") == 5
+
+                onCheckedChanged: {
+                    if(checked)
+                        _frontend.setInputValue(player, "plugin", 5)
+                    else
+                        _frontend.setInputValue(player, "plugin", 0)
+                }
+            }
+        }
 	    
 	    DropDown {
 	        id: _skin
@@ -74,7 +150,13 @@ Container {
 	            text: "Alternate"
 	            value: 2
 	            selected: _frontend.getInputValue(player, "layout") == 2
-	        }
+            }
+            
+            Option {
+                text: "Fullscreen"
+                value: 3
+                selected: _frontend.getInputValue(player, "layout") == 3
+            }
 	        
 	        onSelectedValueChanged: {
 	            _frontend.setInputValue(player, "layout", selectedValue)
@@ -91,12 +173,42 @@ Container {
 	
 	//keyboard
 	ScrollView {
-        visible: _device.selectedIndex == 2
+        visible: _keyboardindex.selected
 		Container {
 		    id:_keyboard
 		    
 		    leftPadding: 20
-		    rightPadding: 20
+            rightPadding: 20
+            
+            Container {
+                bottomPadding: 20
+                Container {
+                    layout: StackLayout {
+                        orientation: LayoutOrientation.LeftToRight
+                    }
+                    
+                    Label {
+                        text: qsTr("Rumble Pak")
+                        preferredWidth: 768
+                        verticalAlignment: VerticalAlignment.Center
+                    }
+                    
+                    ToggleButton {
+                        id: toggle2
+                        checked:_frontend.getInputValue(player, "plugin") == 5
+                        
+                        onCheckedChanged: {
+                            if(checked)
+                                _frontend.setInputValue(player, "plugin", 5)
+                            else
+                                _frontend.setInputValue(player, "plugin", 0)
+                        }
+                    }
+                }
+                
+                Divider {
+                }
+            }
 		    
 		    ButtonMap {
 		        id: dr1
@@ -178,6 +290,22 @@ Container {
                 id: xd1
 		        button: "Y Axis Down"
 		    }
+            ButtonMap {
+                id: xul1
+                button: "Up Left"
+            }
+            ButtonMap {
+                id: xur1
+                button: "Up Right"
+            }
+            ButtonMap {
+                id: xdl1
+                button: "Down Left"
+            }
+            ButtonMap {
+                id: xdr1
+                button: "Down Right"
+            }
 		}
     }
 	
@@ -185,7 +313,7 @@ Container {
 	Container {
 	    id:_gamepad
 	    
-        visible: _device.selectedIndex == 3
+        visible: _gamepadindex.selected
         ScrollView {
             horizontalAlignment: HorizontalAlignment.Fill
             Container {
@@ -348,6 +476,108 @@ Container {
             }
         }
     }
+    
+    //keyboard
+    ScrollView {
+        visible: _touchkeyboard.selected
+        Container {
+            id:_keyboardtouch
+            
+            leftPadding: 20
+            rightPadding: 20
+            
+            Container {
+                bottomPadding: 20
+                Container {
+                    layout: StackLayout {
+                        orientation: LayoutOrientation.LeftToRight
+                    }
+                    
+                    Label {
+                        text: qsTr("Rumble Pak")
+                        preferredWidth: 768
+                        verticalAlignment: VerticalAlignment.Center
+                    }
+                    
+                    ToggleButton {
+                        id: toggle3
+                        checked:_frontend.getInputValue(player, "plugin") == 5
+                        
+                        onCheckedChanged: {
+                            if(checked)
+                                _frontend.setInputValue(player, "plugin", 5)
+                            else
+                                _frontend.setInputValue(player, "plugin", 0)
+                        }
+                    }
+                }
+                
+                Divider {
+                }
+            }
+            
+            ButtonMap {
+                id: kt_dr1
+                button: "DPad R"
+            }
+            ButtonMap {
+                id: kt_dl1
+                button: "DPad L"
+            }
+            ButtonMap {
+                id: kt_dd1
+                button: "DPad D"
+            }
+            ButtonMap {
+                id: kt_du1
+                button: "DPad U"
+            }
+            ButtonMap {
+                id: kt_z1
+                button: "Z Trig"
+            }
+            ButtonMap {
+                id: kt_b1 
+                button: "B Button"
+            }
+            ButtonMap {
+                id: kt_a1 
+                button: "A Button"
+            }
+            ButtonMap {
+                id: kt_cr1
+                button: "C Button R"
+            }
+            ButtonMap {
+                id: kt_cl1
+                button: "C Button L"
+            }
+            ButtonMap {
+                id: kt_cd1
+                button: "C Button D"
+            }
+            ButtonMap {
+                id: kt_cu1
+                button: "C Button U"
+            }
+            ButtonMap {
+                id: kt_rt1
+                button: "R Trig"
+            }
+            ButtonMap {
+                id: kt_lt1
+                button: "L Trig"
+            }
+            ButtonMap {
+                id: kt_mem1
+                button: "Mempak switch"
+            }
+            ButtonMap {
+                id: kt_rumble1
+                button: "Rumblepak switch"
+            }
+        }
+    }
 	
     function reset() {
         _device.selectedIndex = 1
@@ -372,6 +602,25 @@ Container {
         xr1.reset()
         xu1.reset()
         xd1.reset()
+        xul1.reset()
+        xur1.reset()
+        xdl1.reset()
+        xdr1.reset()
+        kt_dr1.reset()
+        kt_dl1.reset()
+        kt_dd1.reset()
+        kt_du1.reset()
+        kt_z1.reset()
+        kt_b1.reset()
+        kt_a1.reset()
+        kt_cr1.reset()
+        kt_cl1.reset()
+        kt_cd1.reset()
+        kt_cu1.reset()
+        kt_rt1.reset()
+        kt_lt1.reset()
+        kt_mem1.reset()
+        kt_rumble1.reset()
         dr2.reset()
         dl2.reset()
         dd2.reset()
