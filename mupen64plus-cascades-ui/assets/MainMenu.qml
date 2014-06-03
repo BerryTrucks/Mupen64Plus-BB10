@@ -1,4 +1,4 @@
-import bb.cascades 1.0
+import bb.cascades 1.3
 import bb.cascades.pickers 1.0
 
 Page {
@@ -12,13 +12,12 @@ Page {
     property bool startNow: false
     property bool running: false
     property variant emuSheet
+    property string lastROM: ""
     
     function startEmulator() {
         _frontend.video = videoPlugin;
-        _frontend.audio = sound;
-        if(_frontend.rom == ""){
-            //Do something to focus on select rom box
-        } else {
+        _frontend.audio = sound ? 1 : 0;
+        if (_frontend.rom.length > 0) {
             emuSheet = playSheet.createObject()
             emuSheet.open()
             Application.swipeDown.connect(onSwipeDown)
@@ -30,6 +29,23 @@ Page {
                 OrientationSupport.supportedDisplayOrientation = 
                 SupportedDisplayOrientation.DisplayLandscape;
             }
+        }
+        else if (lastROM.length > 0) {
+            _frontend.loadLastROM()
+            emuSheet = playSheet.createObject()
+            emuSheet.open()
+            Application.swipeDown.connect(onSwipeDown)
+            running = true
+            if (_frontend.Keyboard) {
+                _frontend.startEmulator(true);
+            }
+            else {
+                OrientationSupport.supportedDisplayOrientation = 
+                SupportedDisplayOrientation.DisplayLandscape;
+            }
+        }
+        else {
+            romSelectButton.requestFocus()
         }
     }
     
@@ -60,12 +76,17 @@ Page {
         }
     }
     
-    function invoked(path) {
+    function invoked(path, runnow) {
         if (!running) {
-            loadROM(path)
+            if (runnow) {
+                playROM(path)
+            }
+            else {
+            	loadROM(path)
+            }
         }
     }
-    
+
     function loadROM(path) {
         romLoading = true
         _frontend.rom = path
@@ -95,7 +116,7 @@ Page {
         ActionItem {
             id: _play
             title: "Play"
-            ActionBar.placement: ActionBarPlacement.OnBar
+            ActionBar.placement: _frontend.playPlacement
             imageSource: "asset:///images/ic_open.png"
             onTriggered: {
                 startEmulator()
@@ -135,7 +156,12 @@ Page {
                     Label {
                         text: _frontend.debugMode ? qsTr("Mupen64Plus-BB Debug") : qsTr("Mupen64Plus-BB")
                         textStyle.fontSize: FontSize.Large
-                        textStyle.color: Color.White
+                        
+                        onCreationCompleted: {
+                            if (!_frontend.isOSThree && _frontend.themeIndex == 0) {
+                                textStyle.color = Color.White
+                            }
+                        }
                     }
                 }
                 Container {
@@ -156,10 +182,13 @@ Page {
     
     // Content Container
     Container {
-        horizontalAlignment: HorizontalAlignment.Center
+        horizontalAlignment: HorizontalAlignment.Fill
+        layout: DockLayout {
+        }
         
 	    Container {
 	        topPadding: 10
+	        horizontalAlignment: HorizontalAlignment.Fill
 
 	        // Top Container with a RadioButtonGroup and title
 	        Container {
@@ -182,12 +211,28 @@ Page {
 	                    enabled: false
 	                    hintText: "Select a ROM"
 	                    text: picker.selectedFile
+	                    
+                        function lastROMChanged() {
+                            if (_frontend.hasHistory) {
+                                lastROM = _frontend.lastROM
+                                hintText = lastROM
+                            }
+	                    }
+	                    
+	                    onCreationCompleted: {
+	                        if (_frontend.hasHistory) {
+	                            lastROM = _frontend.lastROM
+	                            hintText = lastROM
+	                        }
+	                        _frontend.hasHistoryChanged.connect(lastROMChanged)
+	                    }
 	                }
 
 	                Button {
 	                    text: "..."
 	                    horizontalAlignment: HorizontalAlignment.Right
 	                    preferredWidth: 1
+	                    id: romSelectButton
 	                    onClicked: {
 	                        if (_frontend.hasStartDirectory)
 	                        	picker.directories = [ _frontend.startDirectory ]
@@ -339,6 +384,8 @@ Page {
             ActionBar.placement: ActionBarPlacement.OnBar
             imageSource: "asset:///images/ic_hdmi.png"
             onTriggered: {
+                _frontend.useHdmi = true
+                startEmulator()
             }
         },
         ActionItem {
