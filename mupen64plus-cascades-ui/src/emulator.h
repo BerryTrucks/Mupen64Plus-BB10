@@ -30,6 +30,7 @@ typedef struct {
 
 	int analogDeadZone[2];
 	int analogPeak[2];
+	int diagonals[4];
 	char gamepadId[64];
 } Controller;
 
