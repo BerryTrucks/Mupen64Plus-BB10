@@ -135,7 +135,8 @@ SOURCE = \
 	$(SRCDIR)/config.c \
 	$(SRCDIR)/osal_dynamiclib_unix.c \
 	$(SRCDIR)/touch.c \
-	$(SRCDIR)/input.c
+	$(SRCDIR)/input.c \
+	$(SRCDIR)/gamepad.c
 	#$(SRCDIR)/bbutil.c
 
 # generate a list of object files build, make a temporary directory for them
