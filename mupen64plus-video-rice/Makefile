@@ -113,6 +113,7 @@ else
 endif
 
 #CXX := C:/bbndk-2.1.0-beta1/host/win32/x86/usr/bin/qcc -V4.4.2,gcc_ntoarmv7le_cpp
+CXX := J:/bbndk10.2-Gold/host_10_1_0_238/win32/x86/usr/bin/qcc -V4.6.3,gcc_ntoarmv7le_cpp
 RM       ?= rm -f
 INSTALL  ?= install
 MKDIR ?= mkdir -p
@@ -147,12 +148,6 @@ endif
 
 # list of source files to compile
 SOURCE = \
-	$(SRCDIR)/liblinux/BMGImage.c \
-	$(SRCDIR)/liblinux/BMGUtils.cpp \
-	$(SRCDIR)/liblinux/bmp.c \
-	$(SRCDIR)/liblinux/pngrw.c \
-	$(SRCDIR)/osal_dynamiclib_unix.c \
-	$(SRCDIR)/osal_files_unix.c \
 	$(SRCDIR)/Blender.cpp \
 	$(SRCDIR)/Combiner.cpp \
 	$(SRCDIR)/CombinerTable.cpp \
@@ -161,8 +156,8 @@ SOURCE = \
 	$(SRCDIR)/ConvertImage16.cpp \
 	$(SRCDIR)/Debugger.cpp \
 	$(SRCDIR)/DecodedMux.cpp \
-	$(SRCDIR)/DirectXDecodedMux.cpp \
 	$(SRCDIR)/DeviceBuilder.cpp \
+	$(SRCDIR)/DirectXDecodedMux.cpp \
 	$(SRCDIR)/FrameBuffer.cpp \
 	$(SRCDIR)/GeneralCombiner.cpp \
 	$(SRCDIR)/GraphicsContext.cpp \
@@ -170,7 +165,7 @@ SOURCE = \
 	$(SRCDIR)/OGLDecodedMux.cpp \
 	$(SRCDIR)/OGLExtCombiner.cpp \
 	$(SRCDIR)/OGLExtRender.cpp \
-	$(SRCDIR)/OGLFragmentShaders.cpp \
+    $(SRCDIR)/OGLES2FragmentShaders.cpp \
 	$(SRCDIR)/OGLGraphicsContext.cpp \
 	$(SRCDIR)/OGLRender.cpp \
 	$(SRCDIR)/OGLRenderExt.cpp \
@@ -189,7 +184,12 @@ SOURCE = \
 	$(SRCDIR)/TextureManager.cpp \
 	$(SRCDIR)/VectorMath.cpp \
 	$(SRCDIR)/Video.cpp \
-	#$(SRCDIR)/bbutil.c
+	$(SRCDIR)/osal_dynamiclib_unix.c \
+	$(SRCDIR)/osal_files_unix.c \
+	$(SRCDIR)/liblinux/BMGImage.c \
+	$(SRCDIR)/liblinux/BMGUtils.cpp \
+	$(SRCDIR)/liblinux/bmp.c \
+	$(SRCDIR)/liblinux/pngrw.c
 
 # generate a list of object files build, make a temporary directory for them
 OBJECTS := $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(filter %.c, $(SOURCE)))

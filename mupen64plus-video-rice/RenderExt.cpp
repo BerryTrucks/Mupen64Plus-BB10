@@ -17,7 +17,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 
-#include "OGLPlatform.h"
+#include "osal_opengl.h"
 #include "OGLDebug.h"
 #include "FrameBuffer.h"
 #include "Render.h"
@@ -82,18 +82,17 @@ void CRender::LoadFrameBuffer(bool useVIreg, uint32 left, uint32 top, uint32 wid
             gti.LeftToLoad      = left;
             gti.TopToLoad       = top;
 
-            gti.WidthToCreate       = width;
-            gti.HeightToCreate      = height;
+            gti.WidthToCreate   = width;
+            gti.HeightToCreate  = height;
         }
 
         if( gti.Size == TXT_SIZE_4b )
         {
-            gti.Pitch   = g_CI.dwWidth >> 1;
+            gti.Pitch = g_CI.dwWidth >> 1;
         }
         else
         {
-            gti.Pitch   = g_CI.dwWidth << (gti.Size-1);
-
+            gti.Pitch = g_CI.dwWidth << (gti.Size-1);
         }
     }
 
@@ -130,12 +129,12 @@ void CRender::LoadTextureFromMemory(void *buf, uint32 left, uint32 top, uint32 w
     gti.Palette = 0;
     gti.TLutFmt = TLUT_FMT_RGBA16;  //RGBA16
     gti.PalAddress = 0;
-    gti.bSwapped    = FALSE;
+    gti.bSwapped = FALSE;
     gti.Address = 0;
-    gti.LeftToLoad      = 0;
-    gti.TopToLoad       = 0;
-    gti.WidthToCreate       = width;
-    gti.HeightToCreate      = height;
+    gti.LeftToLoad = 0;
+    gti.TopToLoad = 0;
+    gti.WidthToCreate = width;
+    gti.HeightToCreate = height;
 
     gti.Pitch   = pitch;
 
@@ -756,16 +755,16 @@ void CRender::DrawSprite(uObjTxSprite &sprite, bool rectR)  //Without Ratation
 
         x0 = gObjMtxReal.X + objX/gObjMtxReal.BaseScaleX;
         y0 = gObjMtxReal.Y + objY/gObjMtxReal.BaseScaleY;
-        x1 = gObjMtxReal.X + (objX + width / scaleW) / gObjMtxReal.BaseScaleX - 1;
-        y1 = gObjMtxReal.Y + (objY + high / scaleH) / gObjMtxReal.BaseScaleY - 1;
+        x1 = gObjMtxReal.X + (objX + width / scaleW) / gObjMtxReal.BaseScaleX;
+        y1 = gObjMtxReal.Y + (objY + high / scaleH) / gObjMtxReal.BaseScaleY;
     }
     else
     {
         // (objX, objY) - ( objX+imageW/scaleW-1, objY+imageH/scaleH-1)
         x0 = objX;
         y0 = objY;
-        x1 = objX + width / scaleW - 1;
-        y1 = objY + high / scaleH - 1;
+        x1 = objX + width / scaleW;
+        y1 = objY + high / scaleH;
 
         if( (sprite.sprite.imageFlags&1) ) // flipX
         {
