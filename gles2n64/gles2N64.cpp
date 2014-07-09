@@ -1,12 +1,9 @@
+
 #include <dlfcn.h>
 #include <string.h>
-//#include <SDL.h>
-//#include <cpu-features.h>
 
 #include "m64p_types.h"
 #include "m64p_plugin.h"
-#include "m64p_config.h"
-#include "osal_dynamiclib.h"
 
 #include "gles2N64.h"
 #include "Debug.h"
@@ -19,79 +16,46 @@
 #include "Textures.h"
 #include "ShaderCombiner.h"
 #include "3DMath.h"
-#include "Common.h"
+#include "FrameSkipper.h"
+#include "ticks.h"
 
-/* definitions of pointers to Core config functions */
-ptr_ConfigOpenSection      ConfigOpenSection = NULL;
-ptr_ConfigSetParameter     ConfigSetParameter = NULL;
-ptr_ConfigGetParameter     ConfigGetParameter = NULL;
-ptr_ConfigGetParameterHelp ConfigGetParameterHelp = NULL;
-ptr_ConfigSetDefaultInt    ConfigSetDefaultInt = NULL;
-ptr_ConfigSetDefaultFloat  ConfigSetDefaultFloat = NULL;
-ptr_ConfigSetDefaultBool   ConfigSetDefaultBool = NULL;
-ptr_ConfigSetDefaultString ConfigSetDefaultString = NULL;
-ptr_ConfigGetParamInt      ConfigGetParamInt = NULL;
-ptr_ConfigGetParamFloat    ConfigGetParamFloat = NULL;
-ptr_ConfigGetParamBool     ConfigGetParamBool = NULL;
-ptr_ConfigGetParamString   ConfigGetParamString = NULL;
+#ifdef ANDROID_EDITION
+#include <cpu-features.h>
+#include "ae_imports.h"
+#endif
 
 ptr_ConfigGetSharedDataFilepath ConfigGetSharedDataFilepath = NULL;
-ptr_ConfigGetUserConfigPath     ConfigGetUserConfigPath = NULL;
-ptr_ConfigGetUserDataPath       ConfigGetUserDataPath = NULL;
-ptr_ConfigGetUserCachePath      ConfigGetUserCachePath = NULL;
+
+static FrameSkipper frameSkipper;
 
 u32         last_good_ucode = (u32) -1;
 void        (*CheckInterrupts)( void );
 void        (*renderCallback)() = NULL;
-
 
 extern "C" {
 
 EXPORT m64p_error CALL PluginStartup(m64p_dynlib_handle CoreLibHandle,
         void *Context, void (*DebugCallback)(void *, int, const char *))
 {
-	/* Get the core config function pointers from the library handle */
-	ConfigOpenSection = (ptr_ConfigOpenSection) osal_dynlib_getproc(CoreLibHandle, "ConfigOpenSection");
-	ConfigSetParameter = (ptr_ConfigSetParameter) osal_dynlib_getproc(CoreLibHandle, "ConfigSetParameter");
-	ConfigGetParameter = (ptr_ConfigGetParameter) osal_dynlib_getproc(CoreLibHandle, "ConfigGetParameter");
-	ConfigSetDefaultInt = (ptr_ConfigSetDefaultInt) osal_dynlib_getproc(CoreLibHandle, "ConfigSetDefaultInt");
-	ConfigSetDefaultFloat = (ptr_ConfigSetDefaultFloat) osal_dynlib_getproc(CoreLibHandle, "ConfigSetDefaultFloat");
-	ConfigSetDefaultBool = (ptr_ConfigSetDefaultBool) osal_dynlib_getproc(CoreLibHandle, "ConfigSetDefaultBool");
-	ConfigSetDefaultString = (ptr_ConfigSetDefaultString) osal_dynlib_getproc(CoreLibHandle, "ConfigSetDefaultString");
-	ConfigGetParamInt = (ptr_ConfigGetParamInt) osal_dynlib_getproc(CoreLibHandle, "ConfigGetParamInt");
-	ConfigGetParamFloat = (ptr_ConfigGetParamFloat) osal_dynlib_getproc(CoreLibHandle, "ConfigGetParamFloat");
-	ConfigGetParamBool = (ptr_ConfigGetParamBool) osal_dynlib_getproc(CoreLibHandle, "ConfigGetParamBool");
-	ConfigGetParamString = (ptr_ConfigGetParamString) osal_dynlib_getproc(CoreLibHandle, "ConfigGetParamString");
-
-	ConfigGetSharedDataFilepath = (ptr_ConfigGetSharedDataFilepath) osal_dynlib_getproc(CoreLibHandle, "ConfigGetSharedDataFilepath");
-	ConfigGetUserConfigPath = (ptr_ConfigGetUserConfigPath) osal_dynlib_getproc(CoreLibHandle, "ConfigGetUserConfigPath");
-	ConfigGetUserDataPath = (ptr_ConfigGetUserDataPath) osal_dynlib_getproc(CoreLibHandle, "ConfigGetUserDataPath");
-	ConfigGetUserCachePath = (ptr_ConfigGetUserCachePath) osal_dynlib_getproc(CoreLibHandle, "ConfigGetUserCachePath");
-
-	if (!ConfigOpenSection || !ConfigSetParameter || !ConfigGetParameter ||
-		!ConfigSetDefaultInt || !ConfigSetDefaultFloat || !ConfigSetDefaultBool || !ConfigSetDefaultString ||
-		!ConfigGetParamInt   || !ConfigGetParamFloat   || !ConfigGetParamBool   || !ConfigGetParamString ||
-		!ConfigGetSharedDataFilepath || !ConfigGetUserConfigPath || !ConfigGetUserDataPath || !ConfigGetUserCachePath)
-	{
-		//DebugMessage(M64MSG_ERROR, "Couldn't connect to Core configuration functions");
-		return M64ERR_INCOMPATIBLE;
-	}
+    ConfigGetSharedDataFilepath = (ptr_ConfigGetSharedDataFilepath)
+            dlsym(CoreLibHandle, "ConfigGetSharedDataFilepath");
 
 #ifdef __NEON_OPT
-    //if (android_getCpuFamily() == ANDROID_CPU_FAMILY_ARM &&
-     //       (android_getCpuFeatures() & ANDROID_CPU_ARM_FEATURE_NEON) != 0) {
-      //  MathInitNeon();
-       // gSPInitNeon();
-    //}
+#ifdef ANDROID_EDITION
+    if (android_getCpuFamily() == ANDROID_CPU_FAMILY_ARM &&
+            (android_getCpuFeatures() & ANDROID_CPU_ARM_FEATURE_NEON) != 0)
 #endif
-
-	InitConfiguration();
-
+    {
+        MathInitNeon();
+        gSPInitNeon();
+    }
+#endif
     return M64ERR_SUCCESS;
 }
 
 EXPORT m64p_error CALL PluginShutdown(void)
 {
+    OGL_Stop();  // paulscode, OGL_Stop missing from Yongzh's code
 }
 
 EXPORT m64p_error CALL PluginGetVersion(m64p_plugin_type *PluginType,
@@ -106,7 +70,7 @@ EXPORT m64p_error CALL PluginGetVersion(m64p_plugin_type *PluginType,
         *PluginVersion = PLUGIN_VERSION;
 
     if (APIVersion != NULL)
-        *APIVersion = VIDEO_PLUGIN_API_VERSION;
+        *APIVersion = PLUGIN_API_VERSION;
     
     if (PluginNamePtr != NULL)
         *PluginNamePtr = PLUGIN_NAME;
@@ -160,9 +124,16 @@ EXPORT int CALL InitiateGFX (GFX_INFO Gfx_Info)
 
     CheckInterrupts = Gfx_Info.CheckInterrupts;
 
-    //Config_LoadConfig();
-    Config_LoadConfig_Core();
+    Config_LoadConfig();
     Config_LoadRomConfig(Gfx_Info.HEADER);
+
+    ticksInitialize();
+    if( config.autoFrameSkip )
+        frameSkipper.setSkips( FrameSkipper::AUTO, config.maxFrameSkip );
+    else
+        frameSkipper.setSkips( FrameSkipper::MANUAL, config.maxFrameSkip );
+
+    OGL_Start();
 
     return 1;
 }
@@ -171,31 +142,17 @@ EXPORT void CALL ProcessDList(void)
 {
     OGL.frame_dl++;
 
-    if (config.autoFrameSkip)
-    {
-        OGL_UpdateFrameTime();
-
-        if (OGL.consecutiveSkips < 1)
-        {
-            unsigned t = 0;
-            for(int i = 0; i < OGL_FRAMETIME_NUM; i++) t += OGL.frameTime[i];
-            t *= config.targetFPS;
-            if (config.romPAL) t = (t * 5) / 6;
-            if (t > (OGL_FRAMETIME_NUM * 1000))
-            {
-                OGL.consecutiveSkips++;
-                OGL.frameSkipped++;
-                RSP.busy = FALSE;
-                RSP.DList++;
-                return;
-            }
-        }
-    }
-    else if ((OGL.frame_vsync % config.frameRenderRate) != 0)
+    if (frameSkipper.willSkipNext())
     {
         OGL.frameSkipped++;
         RSP.busy = FALSE;
         RSP.DList++;
+
+        /* avoid hang on frameskip */
+        *REG.MI_INTR |= MI_INTR_DP;
+        CheckInterrupts();
+        *REG.MI_INTR |= MI_INTR_SP;
+        CheckInterrupts();
         return;
     }
 
@@ -208,18 +165,29 @@ EXPORT void CALL ProcessRDPList(void)
 {
 }
 
+EXPORT void CALL ResizeVideoOutput(int Width, int Height)
+{
+}
+
 EXPORT void CALL RomClosed (void)
 {
 }
 
 EXPORT int CALL RomOpen (void)
 {
-    OGL_Start();
     RSP_Init();
     OGL.frame_vsync = 0;
     OGL.frame_dl = 0;
     OGL.frame_prevdl = -1;
     OGL.mustRenderDlist = false;
+
+    frameSkipper.setTargetFPS(config.romPAL ? 50 : 60);
+    return 1;
+}
+
+EXPORT void CALL RomResumed(void)
+{
+    frameSkipper.start();
 }
 
 EXPORT void CALL ShowCFB (void)
@@ -228,6 +196,8 @@ EXPORT void CALL ShowCFB (void)
 
 EXPORT void CALL UpdateScreen (void)
 {
+    frameSkipper.update();
+
     //has there been any display lists since last update
     if (OGL.frame_prevdl == OGL.frame_dl) return;
 
@@ -318,9 +288,11 @@ EXPORT void CALL FBGetFrameBufferInfo(void *p)
 {
 }
 
-EXPORT void CALL ReadScreen2(void *dest, int *width, int *height)
+// paulscode, API changed this to "ReadScreen2" in Mupen64Plus 1.99.4
+EXPORT void CALL ReadScreen2(void *dest, int *width, int *height, int front)
 {
-    //OGL_ReadScreen(dest, width, height);
+/* TODO: 'int front' was added in 1.99.4.  What to do with this here? */
+    OGL_ReadScreen(dest, width, height);
 }
 
 EXPORT void CALL SetRenderingCallback(void (*callback)())
@@ -328,7 +300,12 @@ EXPORT void CALL SetRenderingCallback(void (*callback)())
     renderCallback = callback;
 }
 
-
+EXPORT void CALL SetFrameSkipping(bool autoSkip, int maxSkips)
+{
+    frameSkipper.setSkips(
+            autoSkip ? FrameSkipper::AUTO : FrameSkipper::MANUAL,
+            maxSkips);
+}
 
 EXPORT void CALL SetStretchVideo(bool stretch)
 {

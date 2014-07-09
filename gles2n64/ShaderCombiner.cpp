@@ -1,11 +1,11 @@
 
 #include <stdlib.h>
-#include <string.h>
 #include "OpenGL.h"
 #include "ShaderCombiner.h"
 #include "Common.h"
 #include "Textures.h"
 #include "Config.h"
+
 
 //(sa - sb) * m + a
 static const u32 saRGBExpanded[] =
@@ -259,9 +259,7 @@ DecodedMux::DecodedMux(u64 mux, bool cycle2)
 
     //simplifying mux:
     if (replace(G_CYC_1CYCLE, LOD_FRACTION, ZERO) || replace(G_CYC_2CYCLE, LOD_FRACTION, ZERO))
-    {
-        //LOG(LOG_VERBOSE, "SC Replacing LOD_FRACTION with ZERO\n");
-    }
+        LOG(LOG_VERBOSE, "SC Replacing LOD_FRACTION with ZERO\n");
 #if 1
     if (replace(G_CYC_1CYCLE, K4, ZERO) || replace(G_CYC_2CYCLE, K4, ZERO))
         LOG(LOG_VERBOSE, "SC Replacing K4 with ZERO\n");

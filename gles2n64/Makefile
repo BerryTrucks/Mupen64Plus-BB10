@@ -31,20 +31,20 @@ LDFLAGS =
 SO_EXTENSION = so
 #CC_OVERRIDE = C:/bbndk/host_10_0_9_52/win32/x86/usr/bin/qcc -V4.6.3,gcc_ntoarmv7le_cpp -w1 -shared
 #CXX = C:/bbndk-2.1.0-beta1/host/win32/x86/usr/bin/qcc -V4.4.2,gcc_ntoarmv7le_cpp -w1 -shared
+CXX := J:/bbndk10.2-Gold/host_10_1_0_238/win32/x86/usr/bin/qcc -V4.6.3,gcc_ntoarmv7le_cpp
 
 CXX += -w1 -shared
 INCLUDE = ..
 CFLAGS  += -I$(INCLUDE)/blackberry-SDL/include
-CFLAGS  += -I../mupen64plus-core-richard42/api
+CFLAGS  += -I../mupen64plus-core-richard42/api -I../bbutil
 CFLAGS  += -march=armv7-a -mcpu=cortex-a8 -mfpu=neon -mfloat-abi=softfp -ffast-math #\
                   #-fsingle-precision-constant  -ftree-vectorize -fexpensive-optimizations -fomit-frame-pointer
 
 #CFLAGS  += -findirect-inlining
 #CFLAGS  += -ftree-switch-conversion
 
-CFLAGS  += -DARM_ASM -D__NEON_OPT -D__VEC4_OPT -D__HASHMAP_OPT -D__CRC_OPT
+CFLAGS  += -DARM_ASM -D__NEON_OPT -DUSE_SDL -D__CRC_OPT -D__HASHMAP_OPT -D__TRIBUFFER_OPT -D__VEC4_OPT
 #CFLAGS += -D__PACKVERTEX_OPT
-CFLAGS += -D__TRIBUFFER_OPT
 
 CFLAGS += -Wall -fPIC
 LDFLAGS += -lGLESv2 -L../blackberry-SDL/Device-Debug -lSDL12 -L../mupen64plus-cascades-ui/lib -lbbutil
@@ -56,35 +56,38 @@ LDFLAGS += -lGLESv2 -L../blackberry-SDL/Device-Debug -lSDL12 -L../mupen64plus-ca
 OBJECTS =
 
 # list of object files to generate
-OBJECTS = Config.o \
-    gles2n64.o \
-        OpenGL.o \
-        N64.o \
-        RSP.o \
-        VI.o \
-        Textures.o \
-        ShaderCombiner.o \
-        gDP.o \
-        gSP.o \
-        gSPNeon.o \
-        GBI.o \
-        DepthBuffer.o \
+OBJECTS = 2xSAI.o \
+        3DMath.o \
+        Config.o \
         CRC.o \
-        2xSAI.o \
-        RDP.o \
+        DepthBuffer.o \
         F3D.o \
+        F3DCBFD.o \
+        F3DDKR.o \
         F3DEX.o \
         F3DEX2.o \
+        F3DPD.o \
+        F3DWRUS.o \
+        FrameSkipper.o \
+        GBI.o \
+        gDP.o \
+	    gles2n64.o \
+        gSP.o \
         L3D.o \
         L3DEX.o \
         L3DEX2.o \
+        N64.o \
+        OpenGL.o \
+        RDP.o \
+        RSP.o \
         S2DEX.o \
         S2DEX2.o \
-        F3DPD.o \
-        F3DDKR.o \
-        F3DWRUS.o \
-        F3DCBFD.o \
-        osal_dynamiclib_unix.o
+        ShaderCombiner.o \
+        Textures.o \
+        ticks.o \
+        VI.o \
+        gSPNeon.o \
+        3DMathNeon.o
 
 # build targets
 all: ../mupen64plus-cascades-ui/lib/gles2n64.$(SO_EXTENSION)

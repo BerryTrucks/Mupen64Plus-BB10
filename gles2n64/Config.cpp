@@ -30,8 +30,6 @@
 #include "Textures.h"
 #include "OpenGL.h"
 
-static m64p_handle l_ConfigGles2n64 = NULL;
-
 #include "Config.h"
 #include "Common.h"
 
@@ -50,32 +48,28 @@ struct Option
 
 Option configOptions[] =
 {
-    {"#gles2n64 Graphics Plugin for N64", NULL, 0},
+    {"#gln64 Graphics Plugin for N64", NULL, 0},
     {"#by Orkin / glN64 developers and Adventus.", NULL, 0},
 
-    {"config version", &config.version, 2},
-    {"", NULL, 0},
-
-    {"#Screen Settings:", NULL, 0},
-    {"screen width", &config.screen.width, 1280},
-    {"screen height", &config.screen.height, 768},
+    {"config version", &config.version, 0},
     {"", NULL, 0},
 
     {"#Window Settings:", NULL, 0},
-    {"window enable x11", &config.window.enableX11, 1},
-    {"window fullscreen", &config.window.fullscreen, 1},
-    {"window centre", &config.window.centre, 1},
     {"window xpos", &config.window.xpos, 0},
     {"window ypos", &config.window.ypos, 0},
-    {"window width", &config.window.width, 1280},
-    {"window height", &config.window.height, 768},
+    {"window width", &config.window.width, 800},
+    {"window height", &config.window.height, 480},
+    {"window refwidth", &config.window.refwidth, 800},
+    {"window refheight", &config.window.refheight, 480},
     {"", NULL, 0},
 
     {"#Framebuffer Settings:",NULL,0},
 //    {"framebuffer enable", &config.framebuffer.enable, 0},
     {"framebuffer bilinear", &config.framebuffer.bilinear, 0},
-    {"framebuffer width", &config.framebuffer.width, 1280},
-    {"framebuffer height", &config.framebuffer.height, 768},
+    {"framebuffer width", &config.framebuffer.width, 400},
+    {"framebuffer height", &config.framebuffer.height, 240},
+//    {"framebuffer width", &config.framebuffer.width, 800},
+//    {"framebuffer height", &config.framebuffer.height, 480},
     {"", NULL, 0},
 
     {"#VI Settings:", NULL, 0},
@@ -105,6 +99,7 @@ Option configOptions[] =
 
     {"#Frame skip:", NULL, 0},
     {"auto frameskip", &config.autoFrameSkip, 0},
+    {"max frameskip", &config.maxFrameSkip, 0},
     {"target FPS", &config.targetFPS, 20},
     {"frame render rate", &config.frameRenderRate, 1},
     {"vertical sync", &config.verticalSync, 0},
@@ -113,15 +108,19 @@ Option configOptions[] =
     {"#Other Settings:", NULL, 0},
     {"update mode", &config.updateMode, SCREEN_UPDATE_AT_VI_UPDATE },
     {"ignore offscreen rendering", &config.ignoreOffscreenRendering, 0},
-    {"force screen clear", &config.forceBufferClear, 1},
+    {"force screen clear", &config.forceBufferClear, 0},
     {"flip vertical", &config.screen.flipVertical, 0},
+// paulscode: removed from pre-compile to a config option
+//// (part of the Galaxy S Zelda crash-fix
+    {"tribuffer opt", &config.tribufferOpt, 1},
+//
     {"", NULL, 0},
 
     {"#Hack Settings:", NULL, 0},
     {"hack banjo tooie", &config.hackBanjoTooie, 0},
     {"hack zelda", &config.hackZelda, 0},
     {"hack alpha", &config.hackAlpha, 0},
-    {"hack z", &config.zHack, 1},
+    {"hack z", &config.zHack, 0},
 
 };
 
@@ -139,7 +138,7 @@ void Config_WriteConfig(const char *filename)
     for(int i=0; i<configOptionsSize; i++)
     {
         Option *o = &configOptions[i];
-        fprintf(f, o->name);
+        fprintf(f, "%s", o->name);
         if (o->data) fprintf(f,"=%i", *(o->data));
         fprintf(f, "\n");
     }
@@ -216,7 +215,7 @@ void Config_LoadRomConfig(unsigned char* header)
 
     LOG(LOG_MINIMAL, "Rom is %s\n", config.romPAL ? "PAL" : "NTSC");
 
-    const char *filename = "shared/misc/n64/data/gles2n64rom.conf";
+    const char *filename = ConfigGetSharedDataFilepath("gln64rom.conf");
     FILE *f = fopen(filename,"r");
     if (!f)
     {
@@ -225,7 +224,7 @@ void Config_LoadRomConfig(unsigned char* header)
     }
     else
     {
-        LOG(LOG_MINIMAL, "[gles2N64]: Searching %s Database for \"%s\" ROM\n", filename, config.romName);
+        LOG(LOG_MINIMAL, "[gln64]: Searching %s Database for \"%s\" ROM\n", filename, config.romName);
         bool isRom = false;
         while (!feof(f))
         {
@@ -234,8 +233,11 @@ void Config_LoadRomConfig(unsigned char* header)
 
             if (strncmp(line,"rom name=", 9) == 0)
             {
-                char* v = strchr(line, '\n');
-                if (v) *v='\0';
+                //Depending on the editor, end lines could be terminated by "LF" or "CRLF"
+                char* lf = strchr(line, '\n'); //Line Feed
+                char* cr = strchr(line, '\r'); //Carriage Return
+                if (lf) *lf='\0';
+                if (cr) *cr='\0';
                 isRom = (strcasecmp(config.romName, line+9) == 0);
             }
             else
@@ -246,32 +248,35 @@ void Config_LoadRomConfig(unsigned char* header)
                     if (!val) continue;
                     *val++ = '\0';
                     Config_SetOption(line,val);
+                    LOG(LOG_MINIMAL, "%s = %s", line, val);
                 }
             }
         }
     }
+	
+    fclose(f);
 }
 
 void Config_LoadConfig()
 {
     FILE *f;
     char line[4096];
-
     // default configuration
     Config_SetDefault();
 
+
     // read configuration
-    const char *filename = "shared/misc/n64/data/gles2n64.conf";
+    const char *filename = "shared/misc/n64/data/gln64.conf";
     f = fopen(filename, "r");
     if (!f)
     {
-        LOG(LOG_MINIMAL, "[gles2N64]: Couldn't open config file '%s' for reading: %s\n", filename, strerror( errno ) );
-        LOG(LOG_MINIMAL, "[gles2N64]: Attempting to write new Config \n");
+        LOG(LOG_MINIMAL, "[gln64]: Couldn't open config file '%s' for reading: %s\n", filename, strerror( errno ) );
+        LOG(LOG_MINIMAL, "[gln64]: Attempting to write new Config \n");
         Config_WriteConfig(filename);
     }
     else
     {
-        LOG(LOG_MINIMAL, "[gles2n64]: Loading Config from %s \n", filename);
+        LOG(LOG_MINIMAL, "[gln64]: Loading Config from %s \n", filename);
 
         while (!feof( f ))
         {
@@ -291,7 +296,7 @@ void Config_LoadConfig()
 
         if (config.version < CONFIG_VERSION)
         {
-            LOG(LOG_WARNING, "[gles2N64]: Wrong config version, rewriting config with defaults\n");
+            LOG(LOG_WARNING, "[gln64]: Wrong config version, rewriting config with defaults\n");
             Config_SetDefault();
             Config_WriteConfig(filename);
         }
@@ -300,100 +305,3 @@ void Config_LoadConfig()
     }
 }
 
-//Adding Config settings to Mupen Core like rice
-void Config_LoadConfig_Core()
-{
-	config.version = ConfigGetParamInt(l_ConfigGles2n64, "config version");
-	config.screen.width = ConfigGetParamInt(l_ConfigGles2n64, "screen width");
-	config.screen.height = ConfigGetParamInt(l_ConfigGles2n64, "screen height");
-	config.window.enableX11 = ConfigGetParamInt(l_ConfigGles2n64, "window enable x11");
-	config.window.fullscreen = ConfigGetParamInt(l_ConfigGles2n64, "window fullscreen");
-	config.window.centre = ConfigGetParamInt(l_ConfigGles2n64, "window centre");
-	config.window.xpos = ConfigGetParamInt(l_ConfigGles2n64, "window xpos");
-	config.window.ypos = ConfigGetParamInt(l_ConfigGles2n64, "window ypos");
-	config.window.width = ConfigGetParamInt(l_ConfigGles2n64, "window width");
-	config.window.height = ConfigGetParamInt(l_ConfigGles2n64, "window height");
-	config.framebuffer.bilinear = ConfigGetParamInt(l_ConfigGles2n64, "framebuffer bilinear");
-	config.framebuffer.width = ConfigGetParamInt(l_ConfigGles2n64, "framebuffer width");
-	config.framebuffer.height = ConfigGetParamInt(l_ConfigGles2n64, "framebuffer height");
-	config.video.force = ConfigGetParamInt(l_ConfigGles2n64, "video force");
-	config.video.width = ConfigGetParamInt(l_ConfigGles2n64, "video width");
-	config.video.height = ConfigGetParamInt(l_ConfigGles2n64, "video height");
-	config.enableFog = ConfigGetParamInt(l_ConfigGles2n64, "enable fog");
-	config.enablePrimZ = ConfigGetParamInt(l_ConfigGles2n64, "enable primitive z");
-	config.enableLighting = ConfigGetParamInt(l_ConfigGles2n64, "enable lighting");
-	config.enableAlphaTest = ConfigGetParamInt(l_ConfigGles2n64, "enable alpha test");
-	config.enableClipping = ConfigGetParamInt(l_ConfigGles2n64, "enable clipping");
-	config.enableFaceCulling = ConfigGetParamInt(l_ConfigGles2n64, "enable face culling");
-	config.enableNoise = ConfigGetParamInt(l_ConfigGles2n64, "enable noise");
-	config.texture.sai2x = ConfigGetParamInt(l_ConfigGles2n64, "texture 2xSAI");
-	config.texture.forceBilinear = ConfigGetParamInt(l_ConfigGles2n64, "texture force bilinear");
-	config.texture.maxAnisotropy = ConfigGetParamInt(l_ConfigGles2n64, "texture max anisotropy");
-	config.texture.useIA = ConfigGetParamInt(l_ConfigGles2n64, "texture use IA");
-	config.texture.fastCRC = ConfigGetParamInt(l_ConfigGles2n64, "texture fast CRC");
-	config.texture.pow2 = ConfigGetParamInt(l_ConfigGles2n64, "texture pow2");
-	config.autoFrameSkip = ConfigGetParamInt(l_ConfigGles2n64, "auto frameskip");
-	config.targetFPS = ConfigGetParamInt(l_ConfigGles2n64, "target FPS");
-	config.frameRenderRate = ConfigGetParamInt(l_ConfigGles2n64, "frame render rate");
-	config.verticalSync = ConfigGetParamInt(l_ConfigGles2n64, "vertical sync");
-	config.updateMode = ConfigGetParamInt(l_ConfigGles2n64, "update mode");
-	config.ignoreOffscreenRendering = ConfigGetParamInt(l_ConfigGles2n64, "ignore offscreen rendering");
-	config.forceBufferClear = ConfigGetParamInt(l_ConfigGles2n64, "force screen clear");
-	config.screen.flipVertical = ConfigGetParamInt(l_ConfigGles2n64, "flip vertical");
-	config.hackBanjoTooie = ConfigGetParamInt(l_ConfigGles2n64, "hack banjo tooie");
-	config.hackZelda = ConfigGetParamInt(l_ConfigGles2n64, "hack zelda");
-	config.hackAlpha = ConfigGetParamInt(l_ConfigGles2n64, "hack alpha");
-	config.zHack = ConfigGetParamInt(l_ConfigGles2n64, "hack z");
-}
-
-int InitConfiguration(void)
-{
-	if (ConfigOpenSection("gles2n64", &l_ConfigGles2n64) != M64ERR_SUCCESS)
-	{
-		//DebugMessage(M64MSG_ERROR, "Unable to open Video-Rice configuration section");
-		return FALSE;
-	}
-
-	//Set the defaults
-	ConfigSetDefaultInt(l_ConfigGles2n64, "config version", 0, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "screen width", 1280, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "screen height", 768, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "window enable x11", 1, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "window fullscreen", 1, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "window centre", 1, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "window xpos", 0, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "window ypos", 0, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "window width", 1280, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "window height", 768, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "framebuffer bilinear", 0, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "framebuffer width", 1280, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "framebuffer height", 768, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "video force", 0, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "video width", 320, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "video height", 240, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "enable fog", 0, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "enable primitive z", 1, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "enable lighting", 1, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "enable alpha test", 1, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "enable clipping", 0, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "enable face culling", 1, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "enable noise", 0, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "texture 2xSAI", 0, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "texture force bilinear", 0, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "texture max anisotropy", 0, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "texture use IA", 0, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "texture fast CRC", 1, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "texture pow2", 1, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "auto frameskip", 0, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "target FPS", 20, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "frame render rate", 1, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "vertical sync", 0, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "update mode", SCREEN_UPDATE_AT_VI_UPDATE, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "ignore offscreen rendering", 0, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "force screen clear", 1, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "flip vertical", 0, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "hack banjo tooie", 0, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "hack zelda", 0, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "hack alpha", 0, "test");
-	ConfigSetDefaultInt(l_ConfigGles2n64, "hack z", 1, "test");
-}

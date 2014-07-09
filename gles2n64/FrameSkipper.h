@@ -1,7 +1,5 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- *   Mupen64plus-core - osal/dynamiclib_unix.c                             *
- *   Mupen64Plus homepage: http://code.google.com/p/mupen64plus/           *
- *   Copyright (C) 2009 Richard Goedeken                                   *
+ *   Copyright (C) 2011 yongzh (freeman.yong@gmail.com)                    *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -19,19 +17,39 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.          *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <dlfcn.h>
+#ifndef FRAME_SKIPPER_H
+#define FRAME_SKIPPER_H
 
-#include "m64p_types.h"
-#include "osal_dynamiclib.h"
+class FrameSkipper {
+public:
+	enum { AUTO, MANUAL };
 
-void * osal_dynlib_getproc(m64p_dynlib_handle LibHandle, const char *pccProcedureName)
-{
-    if (pccProcedureName == NULL)
-        return NULL;
+	FrameSkipper();
 
-    return dlsym(LibHandle, pccProcedureName);
-}
+	void setSkips(int type, int max) {
+		skipType = type;
+		maxSkips = max;
+	}
 
+	void setTargetFPS(int fps) {
+		targetFPS = fps;
+	}
+
+	bool willSkipNext() {
+		return (skipCounter > 0);
+	}
+
+	void start();
+	void update();
+
+private:
+	int skipType;
+	int maxSkips;
+	int targetFPS;
+	int skipCounter;
+	unsigned int initialTicks;
+	unsigned int virtualCount;
+};
+
+#endif
 
