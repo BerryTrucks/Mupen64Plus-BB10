@@ -258,7 +258,7 @@ void init_combiner()
   char *fragment_shader;
   int log_length;
 
-#ifndef ANDROID
+#if !defined(ANDROID) && !defined(__QNXNTO__)
   // depth shader
   fragment_depth_shader_object = glCreateShader(GL_FRAGMENT_SHADER);
 

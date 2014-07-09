@@ -211,7 +211,7 @@ typedef struct {
   int buff_clear;
   int swapmode;
   int lodmode;
-#ifdef ANDROID_EDITION
+#if defined(ANDROID_EDITION) || defined(__QNXNTO__)
   int autoframeskip;
   int maxframeskip;
 #endif

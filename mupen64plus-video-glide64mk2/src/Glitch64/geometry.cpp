@@ -35,6 +35,8 @@
 
 #ifdef ANDROID_EDITION
 #include "ae_imports.h"
+#endif
+#if defined(ANDROID_EDITION) || defined(__QNXNTO__)
 static float polygonOffsetFactor;
 static float polygonOffsetUnits;
 #endif
@@ -340,6 +342,9 @@ void FindBestDepthBias()
 #ifdef ANDROID_EDITION
   int hardwareType = Android_JNI_GetHardwareType();
   Android_JNI_GetPolygonOffset(hardwareType, 1, &polygonOffsetFactor, &polygonOffsetUnits);
+#elif defined(__QNXNTO__)
+  polygonOffsetFactor = -0.2f;
+  polygonOffsetUnits = -0.2f;
 #else
   float f, bestz = 0.25f;
   int x;
@@ -385,7 +390,7 @@ grDepthBiasLevel( FxI32 level )
   LOG("grDepthBiasLevel(%d)\r\n", level);
   if (level)
   {
-    #ifdef ANDROID_EDITION
+    #if defined(ANDROID_EDITION) || defined(__QNXNTO__)
     glPolygonOffset(polygonOffsetFactor, polygonOffsetUnits);
     #else
     if(w_buffer_mode)

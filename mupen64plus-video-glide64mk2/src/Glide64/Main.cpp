@@ -174,8 +174,14 @@ float      pal_percent = 0.0f;
 
 #ifdef ANDROID_EDITION
 #include "ae_imports.h"
+#endif
+#if defined(ANDROID_EDITION) || defined(__QNXNTO__)
 #include "FrameSkipper.h"
 FrameSkipper frameSkipper;
+#endif
+#ifdef __QNXNTO__
+#include "m64p_types.h"
+using namespace std;
 #endif
 
 unsigned long BMASK = 0x7FFFFF;
@@ -733,7 +739,7 @@ void ReadSpecialSettings (const char * name)
     if (settings.special_lodmode >= 0)
       settings.lodmode = settings.special_lodmode;
 
-#ifdef ANDROID_EDITION
+#if defined(ANDROID_EDITION) || defined(__QNXNTO__)
     ini->Read(_T("autoframeskip"), &(settings.autoframeskip));
     ini->Read(_T("maxframeskip"), &(settings.maxframeskip));
     if( settings.autoframeskip )
@@ -1977,7 +1983,7 @@ EXPORT int CALL RomOpen (void)
   if (code == 0x5000) region = 1; // Europe (PAL)
   if (code == 0x5500) region = 0; // Australia (NTSC)
 
-#ifdef ANDROID_EDITION
+#if defined(ANDROID_EDITION) || defined(__QNXNTO__)
   frameSkipper.setTargetFPS(region == 1 ? 50 : 60);
 #endif
 
@@ -2036,7 +2042,7 @@ EXPORT int CALL RomOpen (void)
 
 EXPORT void CALL RomResumed(void)
 {
-#ifdef ANDROID_EDITION
+#if defined(ANDROID_EDITION) || defined(__QNXNTO__)
   frameSkipper.start();
 #endif
 }
@@ -2128,7 +2134,7 @@ output:   none
 wxUint32 update_screen_count = 0;
 EXPORT void CALL UpdateScreen (void)
 {
-#ifdef ANDROID_EDITION
+#if defined(ANDROID_EDITION) || defined(__QNXNTO__)
   frameSkipper.update();
 #endif
 #ifdef LOG_KEY

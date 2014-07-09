@@ -22,110 +22,20 @@
 # * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 # Makefile for Glide64mk2 plugin in Mupen64Plus
 
-# detect operating system
-UNAME ?= $(shell uname -s)
-OS := NONE
-ifeq ("$(UNAME)","Linux")
-  OS = LINUX
-  SO_EXTENSION = so
-  SHARED = -shared
-endif
-ifeq ("$(UNAME)","linux")
-  OS = LINUX
-  SO_EXTENSION = so
-  SHARED = -shared
-endif
-ifneq ("$(filter GNU hurd,$(UNAME))","")
-  OS = LINUX
-  SO_EXTENSION = so
-  SHARED = -shared
-endif
-ifeq ("$(UNAME)","Darwin")
-  OS = OSX
-  SO_EXTENSION = dylib
-  SHARED = -bundle
-  BOOST_SUFFIX = -mt
-endif
-ifeq ("$(UNAME)","FreeBSD")
-  OS = FREEBSD
-  SO_EXTENSION = so
-  SHARED = -shared
-endif
-ifeq ("$(UNAME)","OpenBSD")
-  OS = FREEBSD
-  SO_EXTENSION = so
-  SHARED = -shared
-  $(warning OS type "$(UNAME)" not officially supported.')
-endif
-ifneq ("$(filter GNU/kFreeBSD kfreebsd,$(UNAME))","")
-  OS = LINUX
-  SO_EXTENSION = so
-  SHARED = -shared
-endif
-ifeq ("$(patsubst MINGW%,MINGW,$(UNAME))","MINGW")
-  OS = MINGW
-  SO_EXTENSION = dll
-  SHARED = -shared
-  PIC = 0
-  BOOST_SUFFIX = -mt
-  CPPFLAGS += -DNO_FILTER_THREAD
-endif
-ifeq ("$(OS)","NONE")
-  $(error OS type "$(UNAME)" not supported.  Please file bug report at 'http://code.google.com/p/mupen64plus/issues')
-endif
+CPU = ARM
+OS = LINUX
+SHARED = -shared
+SO_EXTENSION = so
+ARCH_DETECTED := 32BITS
+NO_ASM := 1
+HIRES = 0
 
-# detect system architecture
-HOST_CPU ?= $(shell uname -m)
-CPU := NONE
-ifneq ("$(filter x86_64 amd64,$(HOST_CPU))","")
-  CPU := X86
-  ifeq ("$(BITS)", "32")
-    ARCH_DETECTED := 64BITS_32
-    PIC ?= 0
-  else
-    ARCH_DETECTED := 64BITS
-    PIC ?= 1
-  endif
-endif
-ifneq ("$(filter pentium i%86,$(HOST_CPU))","")
-  CPU := X86
-  ARCH_DETECTED := 32BITS
-  PIC ?= 0
-endif
-ifneq ("$(filter ppc powerpc,$(HOST_CPU))","")
-  CPU := PPC
-  ARCH_DETECTED := 32BITS
-  BIG_ENDIAN := 1
-  PIC ?= 1
-  NO_ASM := 1
-  $(warning Architecture "$(HOST_CPU)" not officially supported.')
-endif
-ifneq ("$(filter ppc64 powerpc64,$(HOST_CPU))","")
-  CPU := PPC
-  ARCH_DETECTED := 64BITS
-  BIG_ENDIAN := 1
-  PIC ?= 1
-  NO_ASM := 1
-  $(warning Architecture "$(HOST_CPU)" not officially supported.')
-endif
-ifneq ("$(filter arm%,$(HOST_CPU))","")
-  ifeq ("$(filter arm%b,$(HOST_CPU))","")
-    CPU := ARM
-    ARCH_DETECTED := 32BITS
-    PIC ?= 1
-    NO_ASM := 1
-    $(warning Architecture "$(HOST_CPU)" not officially supported.')
-  endif
-endif
-ifeq ("$(CPU)","NONE")
-  $(error CPU type "$(HOST_CPU)" not supported.  Please file bug report at 'http://code.google.com/p/mupen64plus/issues')
-endif
 
 # base CFLAGS, LDLIBS, and LDFLAGS
 OPTFLAGS ?= -O2 -flto
 WARNFLAGS ?= -Wall
 CFLAGS += $(OPTFLAGS) $(WARNFLAGS) -ffast-math -fno-strict-aliasing -fvisibility=hidden -I../../src -I../../src/Glitch64/inc -DGCC
-CXXFLAGS += -fvisibility-inlines-hidden -std=gnu++0x
+CXXFLAGS += -fvisibility-inlines-hidden
 LDFLAGS += $(SHARED)
 BOOST_SUFFIX ?=
 
@@ -158,7 +68,10 @@ endif
 ifeq ($(OS), LINUX)
   # only export api symbols
   LDFLAGS += -Wl,-version-script,$(SRCDIR)/video_api_export.ver
-  LDLIBS += -ldl
+  LDLIBS += -lc
+  CFLAGS += -I../../../blackberry-SDL/include
+  CFLAGS += -DGLES_2 -DPRE -DNOSSE -DNO_ASM -fPIC
+  LDLIBS += -L../../../mupen64plus-cascades-ui/lib/ -lGLESv2 -lpng -lSDL12 -lbbutil -lz
 endif
 ifeq ($(OS), OSX)
   #xcode-select has been around since XCode 3.0, i.e. OS X 10.5
@@ -180,72 +93,9 @@ ifeq ($(OS), FREEBSD)
   LDLIBS += -lc
 endif
 
-ifeq ($(origin PKG_CONFIG), undefined)
-  PKG_CONFIG = $(CROSS_COMPILE)pkg-config
-  ifeq ($(shell which $(PKG_CONFIG) 2>/dev/null),)
-    $(error $(PKG_CONFIG) not found)
-  endif
-endif
-
 ifeq ($(OS), OSX) # use system zlib on OSX
   ZLIB_LDLIBS += -lz
 endif
-
-ifeq ($(origin ZLIB_CFLAGS) $(origin ZLIB_LDLIBS), undefined undefined)
-  ifeq ($(shell $(PKG_CONFIG) --modversion zlib 2>/dev/null),)
-    $(error No zlib development libraries found!)
-  endif
-  ZLIB_CFLAGS += $(shell $(PKG_CONFIG) --cflags zlib)
-  ZLIB_LDLIBS +=  $(shell $(PKG_CONFIG) --libs zlib)
-endif
-CFLAGS += $(ZLIB_CFLAGS)
-LDLIBS += $(ZLIB_LDLIBS)
-
-ifeq ($(origin LIBPNG_CFLAGS) $(origin LIBPNG_LDLIBS), undefined undefined)
-  ifeq ($(shell $(PKG_CONFIG) --modversion libpng 2>/dev/null),)
-    $(error No libpng development libraries found!)
-  endif
-  LIBPNG_CFLAGS += $(shell $(PKG_CONFIG) --cflags libpng)
-  LIBPNG_LDLIBS +=  $(shell $(PKG_CONFIG) --libs libpng)
-endif
-CFLAGS += $(LIBPNG_CFLAGS)
-LDLIBS += $(LIBPNG_LDLIBS)
-
-# search for OpenGL libraries
-ifeq ($(OS), OSX)
-  GL_LDLIBS = -framework OpenGL
-endif
-ifeq ($(OS), MINGW)
-  GL_LDLIBS = -lopengl32
-endif
-ifeq ($(origin GL_CFLAGS) $(origin GL_LDLIBS), undefined undefined)
-  ifeq ($(shell $(PKG_CONFIG) --modversion gl 2>/dev/null),)
-    $(error No OpenGL development libraries found!)
-  endif
-  GL_CFLAGS += $(shell $(PKG_CONFIG) --cflags gl)
-  GL_LDLIBS +=  $(shell $(PKG_CONFIG) --libs gl)
-endif
-CFLAGS += $(GL_CFLAGS)
-LDLIBS += $(GL_LDLIBS)
-
-# test for presence of SDL
-ifeq ($(origin SDL_CFLAGS) $(origin SDL_LDLIBS), undefined undefined)
-  SDL_CONFIG = $(CROSS_COMPILE)sdl-config
-  ifeq ($(shell which $(SDL_CONFIG) 2>/dev/null),)
-    $(error No SDL development libraries found!)
-  endif
-  ifeq ($(OS),OSX)
-    SDL_CFLAGS  += $(shell $(SDL_CONFIG) --cflags)
-    # sdl-config on mac screws up when we're trying to build a library and not an executable
-    # SDL 1.3 is supposed to fix that, if it's ever released
-    SDL_LDLIBS += -L/usr/local/lib -lSDL -Wl,-framework,Cocoa
-  else
-    SDL_CFLAGS  += $(shell $(SDL_CONFIG) --cflags)
-    SDL_LDLIBS += $(shell $(SDL_CONFIG) --libs)
-  endif
-endif
-CFLAGS += $(SDL_CFLAGS)
-LDLIBS += $(SDL_LDLIBS)
 
 ifneq ($(OS), MINGW)
   CPPFLAGS += -D__unix__
@@ -255,7 +105,7 @@ endif
 ifneq ("$(APIDIR)","")
   CFLAGS += "-I$(APIDIR)"
 else
-  TRYDIR = ../../../mupen64plus-core/src/api
+  TRYDIR = ../../../mupen64plus-core-richard42/api
   ifneq ("$(wildcard $(TRYDIR)/m64p_types.h)","")
     CFLAGS += -I$(TRYDIR)
   else
@@ -283,8 +133,8 @@ endif
 endif
 
 # set base program pointers and flags
-CC        = $(CROSS_COMPILE)gcc
-CXX       = $(CROSS_COMPILE)g++
+CC := J:/bbndk10.2-Gold/host_10_1_0_238/win32/x86/usr/bin/qcc -V4.6.3,gcc_ntoarmv7le
+CXX := J:/bbndk10.2-Gold/host_10_1_0_238/win32/x86/usr/bin/qcc -V4.6.3,gcc_ntoarmv7le_cpp
 RM       ?= rm -f
 INSTALL  ?= install
 MKDIR ?= mkdir -p
@@ -328,6 +178,7 @@ SOURCE = \
 	$(SRCDIR)/Glitch64/geometry.cpp \
 	$(SRCDIR)/Glitch64/glitchmain.cpp \
 	$(SRCDIR)/Glitch64/textures.cpp \
+	$(SRCDIR)/Glide64/osal_dynamiclib_unix.c \
 	$(SRCDIR)/Glide64/3dmath.cpp \
 	$(SRCDIR)/Glide64/Combine.cpp \
 	$(SRCDIR)/Glide64/Config.cpp \
@@ -335,12 +186,14 @@ SOURCE = \
 	$(SRCDIR)/Glide64/Debugger.cpp \
 	$(SRCDIR)/Glide64/DepthBufferRender.cpp \
 	$(SRCDIR)/Glide64/FBtoScreen.cpp \
+    $(SRCDIR)/Glide64/FrameSkipper.cpp \
 	$(SRCDIR)/Glide64/Ini.cpp \
 	$(SRCDIR)/Glide64/Keys.cpp \
 	$(SRCDIR)/Glide64/Main.cpp \
 	$(SRCDIR)/Glide64/rdp.cpp \
 	$(SRCDIR)/Glide64/TexBuffer.cpp \
 	$(SRCDIR)/Glide64/TexCache.cpp \
+    $(SRCDIR)/Glide64/ticks.c \
 	$(SRCDIR)/Glide64/Util.cpp
 
 ifneq ($(HIRES), 0)
@@ -376,12 +229,6 @@ LDLIBS += -lboost_filesystem$(BOOST_SUFFIX) -lboost_system$(BOOST_SUFFIX)
   endif
 endif
 
-ifeq ($(OS),MINGW)
-SOURCE += $(SRCDIR)/Glide64/osal_dynamiclib_win32.c
-else
-SOURCE += $(SRCDIR)/Glide64/osal_dynamiclib_unix.c
-endif
- 
 
 
 # generate a list of object files build, make a temporary directory for them

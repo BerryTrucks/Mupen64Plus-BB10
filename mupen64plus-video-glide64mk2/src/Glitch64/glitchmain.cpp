@@ -45,6 +45,10 @@
 #include <IL/il.h>
 #endif
 
+#ifdef __QNXNTO__
+#include "../../../bbutil/bbutil.h"
+#endif
+
 extern void (*renderCallback)(int);
 
 wrapper_config config = {0, 0, 0, 0};
@@ -503,6 +507,7 @@ grSstWinOpen(
   // ZIGGY viewport_offset is WIN32 specific, with SDL just set it to zero
   viewport_offset = 0; //-10 //-20;
 
+#ifndef __QNXNTO__
   CoreVideo_Init();
   CoreVideo_GL_SetAttribute(M64P_GL_DOUBLEBUFFER, 1);
   CoreVideo_GL_SetAttribute(M64P_GL_SWAP_CONTROL, vsync);
@@ -513,13 +518,16 @@ grSstWinOpen(
   //   SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
   //   SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
   CoreVideo_GL_SetAttribute(M64P_GL_DEPTH_SIZE, 16);
+#endif
 
   printf("(II) Setting video mode %dx%d...\n", width, height);
+#ifndef __QNXNTO__
   if(CoreVideo_SetVideoMode(width, height, 0, fullscreen ? M64VIDEO_FULLSCREEN : M64VIDEO_WINDOWED, (m64p_video_flags) 0) != M64ERR_SUCCESS)
   {
     printf("(EE) Error setting videomode %dx%d\n", width, height);
     return false;
   }
+#endif
 
   char caption[500];
 # ifdef _DEBUG
@@ -810,7 +818,9 @@ grSstWinClose( GrContext_t context )
   //sleep(2);
 #endif
 
+#ifndef __QNXNTO__
   CoreVideo_Quit();
+#endif
 
   return FXTRUE;
 }
@@ -1741,7 +1751,11 @@ grBufferSwap( FxU32 swap_interval )
     return;
   }
 
+#ifdef __QNXNTO__
+   PB_eglSwapBuffers();
+#else
   CoreVideo_GL_SwapBuffers();
+#endif
   for (i = 0; i < nb_fb; i++)
     fbs[i].buff_clear = 1;
 
