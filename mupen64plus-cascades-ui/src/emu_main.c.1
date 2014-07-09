@@ -22,9 +22,9 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 /* This is the main application entry point for the console-only front-end
- * for Mupen64Plus v2.0. 
+ * for Mupen64Plus v2.0.
  */
- 
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -53,7 +53,7 @@ enum VIDEO_PLUGIN
 	VIDEO_PLUGIN_GLES2N64
 };
 
-#include "../../bbutil_qt/bbutil.h"
+#include "../../bbutil/bbutil.h"
 
 /** global variables **/
 int    g_Verbose = 0;
@@ -602,7 +602,7 @@ int emu_main(int argi, char *arguments[], char * groupId)
     }
 
     /* start the Mupen64Plus core library, load the configuration file */
-    m64p_error rval = (*CoreStartup)(CONSOLE_API_VERSION, l_ConfigDirPath, l_DataDirPath, "Core", DebugCallback, NULL, NULL);
+    m64p_error rval = (*CoreStartup)(CONSOLE_API_VERSION, l_ConfigDirPath, l_DataDirPath, "Core", DebugCallback, (void*)NULL, NULL);
     if (rval != M64ERR_SUCCESS)
     {
         printf("UI-console: error starting Mupen64Plus core library.\n");
