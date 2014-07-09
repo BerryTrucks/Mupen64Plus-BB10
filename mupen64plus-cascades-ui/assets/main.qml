@@ -13,67 +13,90 @@
  * limitations under the License.
  */
 import bb.cascades 1.0
-import bb.cascades.pickers 1.0 
+import bb.cascades.pickers 1.0
+import "settings/"
 
 TabbedPane {
     id: mainPane
     //showTabsOnActionBar: true
     Tab {
-        title: "Home" 
+        title: qsTr("Home")
         imageSource: "asset:///images/home.png"
         MainMenu {
-            
-            romDirectory: {
-                if(general.sdcard == false){
-                    ["/accounts/1000/shared/misc/n64/roms"]
-                } else {
-                    ["/accounts/100/removable/sdcard"]
-                }
-            }
-            videoPlugin: video.videoPlugin
-            sound: audio.sound
-            boxartEnabled: general.boxartEnabled
         }
     }
     Tab {
-	    title: "General"
+        title: qsTr("General")
 	    id: generalTest
-	    General {
+	    GeneralSettings {
 	        id: general
 	    }
     }
     Tab {
-        title: "Video"
+        title: qsTr("Video")
         imageSource: "asset:///images/video.png"
-        Video {
+        VideoSettings {
             id: video
         }
     }
     Tab {
-        title: "Audio"
+        title: qsTr("Audio")
         imageSource: "asset:///images/sound.png"
-        Audio {
+        AudioSettings {
             id: audio
         }
     }
     Tab {
-        title: "Input"
+        title: qsTr("Input")
         imageSource: "asset:///images/input.png"
-        Input {}
+        InputSettings {}
     }
     //This tab is dynamically generated in C++
     Tab {
-        title: "Cheats"
+        title: qsTr("Cheats")
         imageSource: "asset:///images/ic_lock.png"
         //Cheats {}
-        Page{
+        Page {
             titleBar: TitleBar {
-                id: titleBar
-                title: "Cheat Codes"
-                visibility:  ChromeVisibility.Visible
+                id: titleBar4
                 scrollBehavior: TitleBarScrollBehavior.Sticky
+                kind: TitleBarKind.FreeForm
+                
+                kindProperties: FreeFormTitleBarKindProperties {
+                    Container {
+                        layout: DockLayout {
+                        }
+                        
+                        leftPadding: 15.0
+                        rightPadding: 15.0
+                        Label {
+                            text: qsTr("Cheat Codes")
+                            textStyle.fontSize: FontSize.Large
+                            textStyle.fontWeight: FontWeight.W500
+                            
+                            onCreationCompleted: {
+                                if (!_frontend.isOSThree && _settings.Settings.Theme == 0) {
+                                    textStyle.color = Color.White
+                                }
+                            }
+                            verticalAlignment: VerticalAlignment.Center
+                        }
+                        
+                        ImageView {
+                            verticalAlignment: VerticalAlignment.Center
+                            horizontalAlignment: HorizontalAlignment.Right
+                            imageSource: "asset:///images/ic_lock.png"
+                            
+                            onCreationCompleted: {
+                                if (_frontend.isOSThree && _settings.Settings.Theme == 0) {
+                                    imageSource = "asset:///images/ic_lock_dk.png"
+                                }
+                            }
+                        }
+                    }
+                }
             }
-            ScrollView{
+            ScrollView {
                 preferredWidth: _frontend.width
                 preferredHeight: _frontend.height
                 
@@ -99,10 +122,9 @@ TabbedPane {
 	        }
 	    }
     }
-    
+
     Menu.definition: MenuDefinition {
-        actions: [
-            ActionItem {
+        helpAction: HelpActionItem {
                 title: qsTr("About")
                 imageSource: "asset:///images/ic_info.png"
                 
@@ -111,7 +133,6 @@ TabbedPane {
                     sheet.open()
                 }
             }
-        ]
     }
     
     attachedObjects: [

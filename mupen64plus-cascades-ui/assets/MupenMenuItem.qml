@@ -6,7 +6,10 @@ Container {
     property alias imageSource: img.imageSource
     property alias textUpper: txt1.text
     property alias textLower: txt2.text
+    property bool longTouched: false
+
     signal clicked()
+    signal longTouch()
     
     preferredHeight: 140.0
     preferredWidth: _frontend.emuWidth / _frontend.numMenuItems
@@ -49,7 +52,10 @@ Container {
         if (event.touchType == TouchType.Up) {
             _frontend.swipedown()
             mupenMenuItem.pressed = false
-            clicked()
+            if (!longTouched) {
+                clicked()
+            }
+            longTouched = false
         }
         else if (event.touchType == TouchType.Cancel) {
             mupenMenuItem.pressed = false
@@ -71,4 +77,13 @@ Container {
             _frontend.removeMupenMenuItem()
         }
     }
+    
+    gestureHandlers: [
+        LongPressHandler {
+            onLongPressed: {
+                longTouched = true
+                longTouch()
+            }
+        }
+    ]
 }

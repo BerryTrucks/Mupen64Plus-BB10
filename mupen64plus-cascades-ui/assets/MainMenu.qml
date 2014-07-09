@@ -1,22 +1,15 @@
-import bb.cascades 1.3
+import bb.cascades 1.0
 import bb.cascades.pickers 1.0
 
 Page {
     id: menu
-    property int videoPlugin
-    property bool sound
-    property alias romDirectory: picker.directories
-    property bool boxartEnabled
     property bool romLoading: false
     property bool useNetImage: false
     property bool startNow: false
     property bool running: false
     property variant emuSheet
-    property string lastROM: ""
     
     function startEmulator() {
-        _frontend.video = videoPlugin;
-        _frontend.audio = sound ? 1 : 0;
         if (_frontend.rom.length > 0) {
             emuSheet = playSheet.createObject()
             emuSheet.open()
@@ -26,22 +19,7 @@ Page {
                 _frontend.startEmulator(true);
             }
             else {
-                OrientationSupport.supportedDisplayOrientation = 
-                SupportedDisplayOrientation.DisplayLandscape;
-            }
-        }
-        else if (lastROM.length > 0) {
-            _frontend.loadLastROM()
-            emuSheet = playSheet.createObject()
-            emuSheet.open()
-            Application.swipeDown.connect(onSwipeDown)
-            running = true
-            if (_frontend.Keyboard) {
-                _frontend.startEmulator(true);
-            }
-            else {
-                OrientationSupport.supportedDisplayOrientation = 
-                SupportedDisplayOrientation.DisplayLandscape;
+                OrientationSupport.supportedDisplayOrientation = SupportedDisplayOrientation.DisplayLandscape
             }
         }
         else {
@@ -92,7 +70,7 @@ Page {
         _frontend.rom = path
         picker.selectedFile = _frontend.rom.substr(_frontend.rom.lastIndexOf('/') + 1)
         
-        if(boxartEnabled){
+        if(_settings.Settings.BoxartScraping){
             var tmp = picker.selectedFile.indexOf("(")
             if(tmp == -1){
                 _tracker.imageSource = "file:///accounts/1000/shared/misc/n64/.boxart/" + picker.selectedFile.substr(0, picker.selectedFile.lastIndexOf(".")).trim() + ".jpg";
@@ -111,6 +89,13 @@ Page {
         startNow = true
         loadROM(path)
     }
+    
+    function onROMLoaded() {
+        if (!_shortcut.loaded) {
+            _shortcut.loaded = true
+            menu.addAction(_shortcut, ActionBarPlacement.InOverflow)
+        }
+    }
 
     actions: [
         ActionItem {
@@ -128,6 +113,7 @@ Page {
         _frontend.hdmiDetected.connect(hdmiDetected)
         _frontend.hasHistoryChanged.connect(hasHistory)
         _frontend.invoked.connect(invoked)
+        _frontend.ROMLoaded.connect(onROMLoaded)
         hasHistory()
     }
     
@@ -154,8 +140,9 @@ Page {
                     leftPadding: 15.0
                     
                     Label {
-                        text: _frontend.debugMode ? qsTr("Mupen64Plus-BB Debug") : qsTr("Mupen64Plus-BB")
+                        text: _frontend.debugMode ? qsTr("Mupen64 Plus BB Debug") : qsTr("Mupen64 Plus BB")
                         textStyle.fontSize: FontSize.Large
+                        textStyle.fontWeight: FontWeight.W500
                         
                         onCreationCompleted: {
                             if (!_frontend.isOSThree && _frontend.themeIndex == 0) {
@@ -211,21 +198,6 @@ Page {
 	                    enabled: false
 	                    hintText: "Select a ROM"
 	                    text: picker.selectedFile
-	                    
-                        function lastROMChanged() {
-                            if (_frontend.hasHistory) {
-                                lastROM = _frontend.lastROM
-                                hintText = lastROM
-                            }
-	                    }
-	                    
-	                    onCreationCompleted: {
-	                        if (_frontend.hasHistory) {
-	                            lastROM = _frontend.lastROM
-	                            hintText = lastROM
-	                        }
-	                        _frontend.hasHistoryChanged.connect(lastROMChanged)
-	                    }
 	                }
 
 	                Button {
@@ -249,7 +221,7 @@ Page {
                 preferredHeight: 500
                 preferredWidth: 768
                 topPadding: _frontend.Keyboard ? 5.0 : 50
-                visible: boxartEnabled
+                visible: _settings.Settings.BoxartScraping
 
                 layout: DockLayout {}
 
@@ -313,13 +285,22 @@ Page {
 	            title: "Rom Selector"
 	            filter: ["*.n64", "*.z64", "*.v64", "*.zip"]
 	            type: FileType.Other
+	            
+                directories: {
+                    if(_settings.Settings.DefaultToSDCard) {
+                        ["/accounts/1000/removable/sdcard"]
+                    }
+                    else {
+                        ["/accounts/1000/shared/misc/n64/roms"]
+                    }
+                }
 	
 	            onFileSelected: {
 	                _frontend.rom = selectedFiles[0];
 	                selectedFile = _frontend.rom.substr(_frontend.rom.lastIndexOf('/')+1);
 	                _frontend.startDirectory = _frontend.rom.substr(0, _frontend.rom.length - selectedFile.length)
 	                
-	                if(boxartEnabled){
+                    if(_settings.Settings.BoxartScraping) {
 	                    var tmp = picker.selectedFile.indexOf("(")
 		                if(tmp == -1){
 		                    _tracker.imageSource = "file:///accounts/1000/shared/misc/n64/.boxart/" + picker.selectedFile.substr(0, picker.selectedFile.lastIndexOf(".")).trim() + ".jpg";
@@ -400,6 +381,32 @@ Page {
                 sheet.open()
             }
         },
+        ActionItem {
+            id: _shortcut
+            title: qsTr("Create Shortcut")
+            ActionBar.placement: ActionBarPlacement.InOverflow
+            property bool loaded: false
+            imageSource: "asset:///images/ic_add_home.png"
+            
+            onTriggered: {
+                var sheet = shortcutSheet.createObject(_frontend)
+                sheet.title = _frontend.rom.substr(_frontend.rom.lastIndexOf('/') + 1)
+                sheet.location = _frontend.rom
+                if(_settings.Settings.BoxartScraping) {
+                    var tmp = picker.selectedFile.indexOf("(")
+                    if(tmp == -1) {
+                        sheet.defaultIcon = "file:///accounts/1000/shared/misc/n64/.boxart/" + picker.selectedFile.substr(0, picker.selectedFile.lastIndexOf(".")).trim() + ".jpg";
+                    }
+                    else {
+                        sheet.defaultIcon = "file:///accounts/1000/shared/misc/n64/.boxart/" + picker.selectedFile.substr(0, tmp).trim() + ".jpg";
+                    }
+                }
+                else {
+                    sheet.defaultIcon = "file:///app/native/assets/images/mupen64plus.png"
+                }
+                sheet.open()
+            }
+        },
         ComponentDefinition {
             id: historySheet
             source: "history.qml"
@@ -407,6 +414,10 @@ Page {
         ComponentDefinition {
             id: playSheet
             source: "play.qml"
+        },
+        ComponentDefinition {
+            id: shortcutSheet
+            source: "shortcut.qml"
         }
     ]
 } // Page

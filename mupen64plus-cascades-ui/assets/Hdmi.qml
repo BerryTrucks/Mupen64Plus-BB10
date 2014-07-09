@@ -1,9 +1,45 @@
 import bb.cascades 1.0
 
 Page {
+    
     titleBar: TitleBar {
+        id: titleBar4
         scrollBehavior: TitleBarScrollBehavior.Sticky
-        title: qsTr("HDMI Settings")
+        kind: TitleBarKind.FreeForm
+        
+        kindProperties: FreeFormTitleBarKindProperties {
+            Container {
+                layout: DockLayout {
+                }
+                
+                leftPadding: 15.0
+                rightPadding: 15.0
+                Label {
+                    text: qsTr("HDMI Settings")
+                    textStyle.fontSize: FontSize.Large
+                    textStyle.fontWeight: FontWeight.W500
+                    
+                    onCreationCompleted: {
+                        if (!_frontend.isOSThree && _frontend.themeIndex == 0) {
+                            textStyle.color = Color.White
+                        }
+                    }
+                    verticalAlignment: VerticalAlignment.Center
+                }
+                
+                ImageView {
+                    verticalAlignment: VerticalAlignment.Center
+                    horizontalAlignment: HorizontalAlignment.Right
+                    imageSource: "asset:///images/ic_hdmi.png"
+                    
+                    onCreationCompleted: {
+                        if (_frontend.isOSThree && _frontend.themeIndex == 0) {
+                            imageSource = "asset:///images/ic_hdmi_dk.png"
+                        }
+                    }
+                }
+            }
+        }
     }
     Container {
         Container {

@@ -11,6 +11,7 @@ Sheet {
 	Page {
         titleBar: TitleBar {
             title: qsTr("Shortcut")
+            scrollBehavior: TitleBarScrollBehavior.Sticky
             acceptAction: ActionItem {
                 title: qsTr("Create")
 
@@ -19,7 +20,7 @@ Sheet {
                     if (res.length == 0) {
                         res = defaultIcon
                     }
-                    if (_frontend.createShortcut(titleField.text, res, location)) {
+                    if (_frontend.createShortcut(titleField.text, res, location, loadplay.selectedIndex == 0)) {
                     	shortcutSheet.close()
                     }
                 }
@@ -32,66 +33,81 @@ Sheet {
                 }
             }
         }
-        Container {
-            leftPadding: 15.0
-            topPadding: 15.0
-            rightPadding: 15.0
-            bottomPadding: 15.0
+        ScrollView {
             Container {
-                Label {
-                    text: qsTr("Title")
+                leftPadding: 15.0
+                topPadding: 15.0
+                rightPadding: 15.0
+                bottomPadding: 15.0
+                Container {
+                    Label {
+                        text: qsTr("Title")
+                    }
                 }
-            }
-            Container {
-                TextField {
-                    id: titleField
-                    hintText: qsTr("")
-                    validator: Validator {
-                        mode: ValidationMode.Immediate
-                        errorMessage: qsTr("Invalid shortcut name (name must be less than 21 characters long and can only include letters, numbers, and spaces)")
-
-                        onValidate: {
-                            valid = _frontend.isValidFilename(titleField.text)
+                Container {
+                    TextField {
+                        id: titleField
+                        hintText: qsTr("")
+                        validator: Validator {
+                            mode: ValidationMode.Immediate
+                            errorMessage: qsTr("Invalid shortcut name (name must be less than 21 characters long and can only include letters, numbers, and spaces)")
+    
+                            onValidate: {
+                                valid = _frontend.isValidFilename(titleField.text)
+                            }
                         }
                     }
                 }
-            }
-            Container {
-                topPadding: 30.0
-                Label {
-                    text: qsTr("Icon")
-                }
-            }
-            Container {
-                layout: StackLayout {
-                    orientation: LayoutOrientation.LeftToRight
-                }
-                TextField {
-                    id: iconField
-                    hintText: qsTr("Use Boxart")
-                    verticalAlignment: VerticalAlignment.Center
-                    enabled: false
-                }
-                Button {
-                    verticalAlignment: VerticalAlignment.Center
-                    text: qsTr("...")
-                    maxWidth: 20.0
+                DropDown {
+					id: loadplay
+                    title: qsTr("Action")
                     
-                    onClicked: {
-                        picker.open()
+                    Option {
+                        text: qsTr("Play")
+                        selected: true
+                    }
+                    
+                    Option {
+                        text: qsTr("Load")
                     }
                 }
-            }
-            Container {
-                topPadding: 15.0
-                horizontalAlignment: HorizontalAlignment.Fill
-	            ImageView {
-	                id: iconImage
-	                imageSource: defaultIcon
-	                horizontalAlignment: HorizontalAlignment.Center
-                    scalingMethod: ScalingMethod.AspectFit
+                Container {
+                    topPadding: 30.0
+                    Label {
+                        text: qsTr("Icon")
+                    }
                 }
-	        }
+                Container {
+                    layout: StackLayout {
+                        orientation: LayoutOrientation.LeftToRight
+                    }
+                    TextField {
+                        id: iconField
+                        hintText: qsTr("Use Boxart")
+                        verticalAlignment: VerticalAlignment.Center
+                        enabled: false
+                    }
+                    Button {
+                        verticalAlignment: VerticalAlignment.Center
+                        text: qsTr("...")
+                        maxWidth: 20.0
+                        
+                        onClicked: {
+                            picker.open()
+                        }
+                    }
+                }
+                Container {
+                    topPadding: 15.0
+                    horizontalAlignment: HorizontalAlignment.Fill
+    	            ImageView {
+    	                id: iconImage
+    	                imageSource: defaultIcon
+    	                horizontalAlignment: HorizontalAlignment.Center
+                        scalingMethod: ScalingMethod.AspectFit
+                    }
+    	        }
+            }
         }
     }
 	
