@@ -43,7 +43,7 @@ int overlayCount = 0;
 char** availableOverlays;
 overlay_t overlay_current;
 
-char * overlays[5];
+char * overlays[6];
 
 void LoadOverlay(char* name)
 {
@@ -68,7 +68,7 @@ void LoadOverlay(char* name)
 	printf("\nLoading Overlay Key...\n");fflush(stdout);
 
 	char * s_width;
-	if (overlay_request == 4){
+	if (overlay_request == 4 || overlay_request == 5){
 		printf("Width 720 detected...\n");fflush(stdout);
 		s_width = strdup("720");
 	}else if(width == 1280){
@@ -185,6 +185,7 @@ void InitTouchInput()
 		overlays[2] = "Alternate";
 		overlays[3] = "Fullscreen";
 		overlays[4] = "Keyboard";
+		overlays[5] = "KeyboardFlip";
 
 		LoadOverlay(overlays[overlay_request]);
 		overlay_current = overlay_request;
