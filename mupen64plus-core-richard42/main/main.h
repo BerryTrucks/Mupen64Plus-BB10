@@ -33,6 +33,8 @@ extern int g_EmulatorRunning;
 
 extern m64p_frame_callback g_FrameCallback;
 
+extern int delay_si;
+
 const char* get_savestatepath(void);
 const char* get_savesrampath(void);
 
@@ -61,8 +63,7 @@ void main_state_save(int format, const char *filename);
 m64p_error main_core_state_query(m64p_core_param param, int *rval);
 m64p_error main_core_state_set(m64p_core_param param, int val);
 
-m64p_error main_get_screen_width(int *width);
-m64p_error main_get_screen_height(int *height);
+m64p_error main_get_screen_size(int *width, int *height);
 m64p_error main_read_screen(void *pixels, int bFront);
 
 m64p_error main_volume_up(void);
@@ -70,6 +71,7 @@ m64p_error main_volume_down(void);
 m64p_error main_volume_get_level(int *level);
 m64p_error main_volume_set_level(int level);
 m64p_error main_volume_mute(void);
+int        main_volume_get_muted(void);
 
 m64p_error main_reset(int do_hard_reset);
 

@@ -23,10 +23,11 @@
 
 #include <stdio.h>
 #include <sys/types.h>
-#include <dirent.h>
 #include <errno.h>
 
+#if !defined(WIN32)
 #include <sys/mman.h>
+#endif
 
 #include "api/m64p_types.h"
 
@@ -69,7 +70,7 @@ DPS_register dps_register;
 
 ALIGN(16, unsigned int rdram[0x800000/4]);
 
-unsigned char *rdramb = (unsigned char *)(rdram);
+unsigned char *const rdramb = (unsigned char *)(rdram);
 unsigned int SP_DMEM[0x1000/4*2];
 unsigned int *SP_IMEM = SP_DMEM+0x1000/4;
 unsigned char *SP_DMEMb = (unsigned char *)(SP_DMEM);
@@ -115,17 +116,17 @@ void (*writememd[0x10000])(void);
 void (*writememh[0x10000])(void);
 
 // memory sections
-static unsigned int *readrdramreg[0x10000];
-static unsigned int *readrspreg[0x10000];
-static unsigned int *readrsp[0x10000];
-static unsigned int *readmi[0x10000];
-static unsigned int *readvi[0x10000];
-static unsigned int *readai[0x10000];
-static unsigned int *readpi[0x10000];
-static unsigned int *readri[0x10000];
-static unsigned int *readsi[0x10000];
-static unsigned int *readdp[0x10000];
-static unsigned int *readdps[0x10000];
+unsigned int *readrdramreg[0x10000];
+unsigned int *readrspreg[0x10000];
+unsigned int *readrsp[0x10000];
+unsigned int *readmi[0x10000];
+unsigned int *readvi[0x10000];
+unsigned int *readai[0x10000];
+unsigned int *readpi[0x10000];
+unsigned int *readri[0x10000];
+unsigned int *readsi[0x10000];
+unsigned int *readdp[0x10000];
+unsigned int *readdps[0x10000];
 
 // the frameBufferInfos
 static FrameBufferInfo frameBufferInfos[6];

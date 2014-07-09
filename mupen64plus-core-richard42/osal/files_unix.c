@@ -101,7 +101,7 @@ static int get_xdg_dir(char *destpath, const char *envvar, const char *subdir)
     strcat(destpath, subdir);
 
     /* try to create the resulting directory tree, or return successfully if it already exists */
-    if (osal_mkdirp(destpath, 0770) != 0)
+    if (osal_mkdirp(destpath, 0700) != 0)
     {
         DebugMessage(M64MSG_ERROR, "Couldn't create directory: %s", destpath);
         return 3;
@@ -202,7 +202,9 @@ const char * osal_get_shared_filepath(const char *filename, const char *firstsea
     for (i = 0; i < datasearchdirs; i++)
     {
         if (search_dir_file(retpath, datasearchpath[i], filename) == 0)
+		{
             return retpath;
+		}
     }
 
     /* we couldn't find the file */
@@ -235,8 +237,10 @@ const char * osal_get_user_datapath(void)
     static char retpath[PATH_MAX];
     int rval;
     
+#ifdef __QNXNTO__
     strcpy(retpath,"shared/misc/n64/");
 	return retpath;
+#endif
 
     /* first, try the XDG_DATA_HOME environment variable */
     rval = get_xdg_dir(retpath, "XDG_DATA_HOME", "mupen64plus/");

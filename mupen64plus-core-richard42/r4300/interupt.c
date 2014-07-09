@@ -127,6 +127,12 @@ void add_interupt_event(int type, unsigned int delay)
    
     if (get_event(type)) {
         DebugMessage(M64MSG_WARNING, "two events of type 0x%x in interrupt queue", type);
+#if defined(ANDROID_EDITION) || defined(__QNXNTO__)
+        // Hack-fix for freezing in Perfect Dark.  TODO: Solve root problem.
+        // http://code.google.com/p/mupen64plus/issues/detail?id=553
+        // https://github.com/mupen64plus-ae/mupen64plus-ae/commit/802d8f81d46705d64694d7a34010dc5f35787c7d
+        return;
+#endif
     }
    
     if (q == NULL)
@@ -355,6 +361,7 @@ void gen_interupt(void)
         else
             next_interupt = 0;
         
+        last_addr = dest;
         generic_jump_to(dest);
         return;
     } 
@@ -382,7 +389,9 @@ void gen_interupt(void)
 #ifdef WITH_LIRC
             lircCheckInput();
 #endif
-            //SDL_PumpEvents();
+#ifndef __QNXNTO__
+            SDL_PumpEvents();
+#endif
 
             refresh_stat();
 
@@ -394,7 +403,9 @@ void gen_interupt(void)
                 while(rompause)
                 {
                     SDL_Delay(10);
-                    //SDL_PumpEvents();
+#ifndef __QNXNTO__
+                    SDL_PumpEvents();
+#endif
 #ifdef WITH_LIRC
                     lircCheckInput();
 #endif //WITH_LIRC
@@ -422,9 +433,9 @@ void gen_interupt(void)
     
         case COMPARE_INT:
             remove_interupt_event();
-            Count+=2;
+            Count+=count_per_op;
             add_interupt_event_count(COMPARE_INT, Compare);
-            Count-=2;
+            Count-=count_per_op;
     
             Cause = (Cause | 0x8000) & 0xFFFFFF83;
             if ((Status & 7) != 1) return;
@@ -439,12 +450,13 @@ void gen_interupt(void)
 #ifdef WITH_LIRC
             lircCheckInput();
 #endif //WITH_LIRC
-            //SDL_PumpEvents();
+#ifndef __QNXNTO__
+            SDL_PumpEvents();
+#endif
             PIF_RAMb[0x3F] = 0x0;
             remove_interupt_event();
             MI_register.mi_intr_reg |= 0x02;
             si_register.si_stat |= 0x1000;
-            si_register.si_stat &= ~0x1;
             if (MI_register.mi_intr_reg & MI_register.mi_intr_mask_reg)
                 Cause = (Cause | 0x400) & 0xFFFFFF83;
             else
@@ -561,9 +573,6 @@ void gen_interupt(void)
                 free_blocks();
                 init_blocks();
             }
-            // set next instruction address to reset vector
-            generic_jump_to(0xa4000040);
-            last_addr = PC->addr;
             // adjust ErrorEPC if we were in a delay slot, and clear the delay_slot and dyna_interp flags
             if(delay_slot==1 || delay_slot==3)
             {
@@ -571,6 +580,9 @@ void gen_interupt(void)
             }
             delay_slot = 0;
             dyna_interp = 0;
+            // set next instruction address to reset vector
+            last_addr = 0xa4000040;
+            generic_jump_to(0xa4000040);
             return;
 
         default:
@@ -580,11 +592,15 @@ void gen_interupt(void)
     }
 
 #ifdef NEW_DYNAREC
-    EPC = pcaddr;
-    pcaddr = 0x80000180;
-    Status |= 2;
-    Cause &= 0x7FFFFFFF;
-    pending_exception=1;
+    if (r4300emu == CORE_DYNAREC) {
+        EPC = pcaddr;
+        pcaddr = 0x80000180;
+        Status |= 2;
+        Cause &= 0x7FFFFFFF;
+        pending_exception=1;
+    } else {
+        exception_general();
+    }
 #else
     exception_general();
 #endif

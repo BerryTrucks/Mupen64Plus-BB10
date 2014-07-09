@@ -24,6 +24,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <SDL_thread.h>
 
 #define M64P_CORE_PROTOTYPES 1
 #include "api/m64p_types.h"
@@ -35,6 +36,7 @@
 #include "main.h"
 #include "rom.h"
 #include "util.h"
+#include "workqueue.h"
 
 #include "memory/memory.h"
 #include "memory/flashram.h"
@@ -64,6 +66,15 @@ static char *fname = NULL;
 
 static unsigned int slot = 0;
 static int autoinc_save_slot = 0;
+
+static SDL_mutex *savestates_lock;
+
+struct savestate_work {
+    char *filepath;
+    char *data;
+    size_t size;
+    struct work_struct work;
+};
 
 /* Returns the malloc'd full path of the currently selected savestate. */
 static char *savestates_generate_path(savestates_type type)
@@ -107,17 +118,10 @@ void savestates_select_slot(unsigned int s)
     if(s>9||s==slot)
         return;
     slot = s;
-    ConfigSetParameter(g_CoreConfig, "CurrentSaveSlot", M64TYPE_INT, &s);
+    ConfigSetParameter(g_CoreConfig, "CurrentStateSlot", M64TYPE_INT, &s);
     StateChanged(M64CORE_SAVESTATE_SLOT, slot);
 
-    if(rom)
-    {
-        char* filepath = savestates_generate_path(savestates_type_m64p);
-        main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Selected state file: %s", namefrompath(filepath));
-        free(filepath);
-    }
-    else
-        main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Selected state slot: %d", slot);
+    main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Selected state slot: %d", slot);
 }
 
 /* Returns the currently selected save slot. */
@@ -158,7 +162,7 @@ void savestates_set_job(savestates_job j, savestates_type t, const char *fn)
         fname = strdup(fn);
 }
 
-void savestates_clear_job(void)
+static void savestates_clear_job(void)
 {
     savestates_set_job(savestates_job_nothing, savestates_type_unknown, NULL);
 }
@@ -190,10 +194,13 @@ static int savestates_load_m64p(char *filepath)
     unsigned char *savestateData, *curr;
     char queue[1024];
 
+    SDL_LockMutex(savestates_lock);
+
     f = gzopen(filepath, "rb");
     if(f==NULL)
     {
         main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Could not open state file: %s", filepath);
+        SDL_UnlockMutex(savestates_lock);
         return 0;
     }
 
@@ -202,6 +209,7 @@ static int savestates_load_m64p(char *filepath)
     {
         main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Could not read header from state file %s", filepath);
         gzclose(f);
+        SDL_UnlockMutex(savestates_lock);
         return 0;
     }
     curr = header;
@@ -210,6 +218,7 @@ static int savestates_load_m64p(char *filepath)
     {
         main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "State file: %s is not a valid Mupen64plus savestate.", filepath);
         gzclose(f);
+        SDL_UnlockMutex(savestates_lock);
         return 0;
     }
     curr += 8;
@@ -222,6 +231,7 @@ static int savestates_load_m64p(char *filepath)
     {
         main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "State version (%08x) isn't compatible. Please update Mupen64Plus.", version);
         gzclose(f);
+        SDL_UnlockMutex(savestates_lock);
         return 0;
     }
 
@@ -229,6 +239,7 @@ static int savestates_load_m64p(char *filepath)
     {
         main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "State ROM MD5 does not match current ROM.");
         gzclose(f);
+        SDL_UnlockMutex(savestates_lock);
         return 0;
     }
     curr += 32;
@@ -240,6 +251,7 @@ static int savestates_load_m64p(char *filepath)
     {
         main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Insufficient memory to load state.");
         gzclose(f);
+        SDL_UnlockMutex(savestates_lock);
         return 0;
     }
     if (gzread(f, savestateData, savestateSize) != savestateSize ||
@@ -248,10 +260,12 @@ static int savestates_load_m64p(char *filepath)
         main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Could not read Mupen64Plus savestate data from %s", filepath);
         free(savestateData);
         gzclose(f);
+        SDL_UnlockMutex(savestates_lock);
         return 0;
     }
 
     gzclose(f);
+    SDL_UnlockMutex(savestates_lock);
 
     // Parse savestate
     rdram_register.rdram_config = GETDATA(curr, unsigned int);
@@ -416,9 +430,18 @@ static int savestates_load_m64p(char *filepath)
     }
 
 #ifdef NEW_DYNAREC
-    pcaddr = GETDATA(curr, unsigned int);
-    pending_exception = 1;
-    invalidate_all_pages();
+    if (r4300emu == CORE_DYNAREC) {
+        pcaddr = GETDATA(curr, unsigned int);
+        pending_exception = 1;
+        invalidate_all_pages();
+    } else {
+        if(r4300emu != CORE_PURE_INTERPRETER)
+        {
+            for (i = 0; i < 0x100000; i++)
+                invalid_code[i] = 1;
+        }
+        generic_jump_to(GETDATA(curr, unsigned int)); // PC
+    }
 #else
     if(r4300emu != CORE_PURE_INTERPRETER)
     {
@@ -438,7 +461,10 @@ static int savestates_load_m64p(char *filepath)
     load_eventqueue_infos(queue);
 
 #ifdef NEW_DYNAREC
-    last_addr = pcaddr;
+    if (r4300emu == CORE_DYNAREC)
+        last_addr = pcaddr;
+    else
+        last_addr = PC->addr;
 #else
     last_addr = PC->addr;
 #endif
@@ -657,11 +683,13 @@ static int savestates_load_pj64(char *filepath, void *handle,
     memset(tlb_LUT_w, 0, 0x400000);
     for (i=0; i < 32; i++)
     {
+        unsigned int MyPageMask, MyEntryHi, MyEntryLo0, MyEntryLo1;
+
         (void)GETDATA(curr, unsigned int); // Dummy read - EntryDefined
-        unsigned int MyPageMask = GETDATA(curr, unsigned int);
-        unsigned int MyEntryHi = GETDATA(curr, unsigned int);
-        unsigned int MyEntryLo0 = GETDATA(curr, unsigned int);
-        unsigned int MyEntryLo1 = GETDATA(curr, unsigned int);
+        MyPageMask = GETDATA(curr, unsigned int);
+        MyEntryHi = GETDATA(curr, unsigned int);
+        MyEntryLo0 = GETDATA(curr, unsigned int);
+        MyEntryLo1 = GETDATA(curr, unsigned int);
 
         // This is copied from TLBWI instruction
         tlb_e[i].g = (MyEntryLo0 & MyEntryLo1 & 1);
@@ -716,9 +744,18 @@ static int savestates_load_pj64(char *filepath, void *handle,
     init_flashram();
 
 #ifdef NEW_DYNAREC
-    pcaddr = GETDATA(curr, unsigned int);
-    pending_exception = 1;
-    invalidate_all_pages();
+    if (r4300emu == CORE_DYNAREC) {
+        pcaddr = GETDATA(curr, unsigned int);
+        pending_exception = 1;
+        invalidate_all_pages();
+    } else {
+        if(r4300emu != CORE_PURE_INTERPRETER)
+        {
+            for (i = 0; i < 0x100000; i++)
+                invalid_code[i] = 1;
+        }
+        generic_jump_to(last_addr);
+    }
 #else
     if(r4300emu != CORE_PURE_INTERPRETER)
     {
@@ -831,15 +868,61 @@ static savestates_type savestates_detect_type(char *filepath)
 
 int savestates_load(void)
 {
-    char *filepath;
+    FILE *fPtr = NULL;
+    char *filepath = NULL;
     int ret = 0;
 
-    if (fname != NULL && type == savestates_type_unknown)
-        type = savestates_detect_type(fname);
-    else if (fname == NULL) // Always load slots in M64P format
+    if (fname == NULL) // For slots, autodetect the savestate type
+    {
+        // try M64P type first
         type = savestates_type_m64p;
+        filepath = savestates_generate_path(type);
+        fPtr = fopen(filepath, "rb"); // can I open this?
+        if (fPtr == NULL)
+        {
+            free(filepath);
+            // try PJ64 zipped type second
+            type = savestates_type_pj64_zip;
+            filepath = savestates_generate_path(type);
+            fPtr = fopen(filepath, "rb"); // can I open this?
+            if (fPtr == NULL)
+            {
+                free(filepath);
+                // finally, try PJ64 uncompressed
+                type = savestates_type_pj64_unc;
+                filepath = savestates_generate_path(type);
+                fPtr = fopen(filepath, "rb"); // can I open this?
+                if (fPtr == NULL)
+                {
+                    free(filepath);
+                    filepath = NULL;
+                    main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "No Mupen64Plus/PJ64 state file found for slot %i", slot);
+                    type = savestates_type_unknown;
+                }
+            }
+        }
+    }
+    else // filename of state file to load was set explicitly in 'fname'
+    {
+        // detect type if unknown
+        if (type == savestates_type_unknown)
+        {
+            type = savestates_detect_type(fname);
+        }
+        filepath = savestates_generate_path(type);
+        if (filepath != NULL)
+            fPtr = fopen(filepath, "rb"); // can I open this?
+        if (fPtr == NULL)
+        {
+            if (filepath != NULL)
+                free(filepath);
+            filepath = NULL;
+            main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Failed to open savestate file %s", filepath);
+        }
+    }
+    if (fPtr != NULL)
+        fclose(fPtr);
 
-    filepath = savestates_generate_path(type);
     if (filepath != NULL)
     {
         switch (type)
@@ -850,24 +933,69 @@ int savestates_load(void)
             default: ret = 0; break;
         }
         free(filepath);
+        filepath = NULL;
     }
+
+    // deliver callback to indicate completion of state loading operation
+    StateChanged(M64CORE_STATE_LOADCOMPLETE, ret);
 
     savestates_clear_job();
 
     return ret;
 }
 
+static void savestates_save_m64p_work(struct work_struct *work)
+{
+    gzFile f;
+    struct savestate_work *save = container_of(work, struct savestate_work, work);
+
+    SDL_LockMutex(savestates_lock);
+
+    // Write the state to a GZIP file
+    f = gzopen(save->filepath, "wb");
+
+    if (f==NULL)
+    {
+        main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Could not open state file: %s", save->filepath);
+        free(save->data);
+        return;
+    }
+
+    if (gzwrite(f, save->data, save->size) != save->size)
+    {
+        main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Could not write data to state file: %s", save->filepath);
+        gzclose(f);
+        free(save->data);
+        return;
+    }
+
+    gzclose(f);
+    main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Saved state to: %s", namefrompath(save->filepath));
+    free(save->data);
+    free(save->filepath);
+    free(save);
+
+    SDL_UnlockMutex(savestates_lock);
+}
+
 static int savestates_save_m64p(char *filepath)
 {
     unsigned char outbuf[4];
-    gzFile f;
     int i;
 
     char queue[1024];
     int queuelength;
 
-    size_t savestateSize;
-    char *savestateData, *curr;
+    struct savestate_work *save;
+    char *curr;
+
+    save = malloc(sizeof(*save));
+    if (!save) {
+        main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Insufficient memory to save state.");
+        return 0;
+    }
+
+    save->filepath = strdup(filepath);
 
     if(autoinc_save_slot)
         savestates_inc_slot();
@@ -875,10 +1003,12 @@ static int savestates_save_m64p(char *filepath)
     queuelength = save_eventqueue_infos(queue);
 
     // Allocate memory for the save state data
-    savestateSize = 16788288 + queuelength;
-    savestateData = curr = malloc(savestateSize);
-    if (savestateData == NULL)
+    save->size = 16788288 + queuelength;
+    save->data = curr = malloc(save->size);
+    if (save->data == NULL)
     {
+        free(save->filepath);
+        free(save);
         main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Insufficient memory to save state.");
         return 0;
     }
@@ -1089,7 +1219,10 @@ static int savestates_save_m64p(char *filepath)
         PUTDATA(curr, unsigned int, tlb_e[i].phys_odd);
     }
 #ifdef NEW_DYNAREC
-    PUTDATA(curr, unsigned int, pcaddr);
+    if (r4300emu == CORE_DYNAREC)
+        PUTDATA(curr, unsigned int, pcaddr);
+    else
+        PUTDATA(curr, unsigned int, PC->addr);
 #else
     PUTDATA(curr, unsigned int, PC->addr);
 #endif
@@ -1101,29 +1234,11 @@ static int savestates_save_m64p(char *filepath)
     to_little_endian_buffer(queue, 4, queuelength/4);
     PUTARRAY(queue, curr, char, queuelength);
 
-    // assert(curr == savestateData + savestateSize)
+    // assert(curr == save->data + save->size)
 
-    // Write the state to a GZIP file
-    f = gzopen(filepath, "wb");
+    init_work(&save->work, savestates_save_m64p_work);
+    queue_work(&save->work);
 
-    if (f==NULL)
-    {
-        main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Could not open state file: %s", filepath);
-        free(savestateData);
-        return 0;
-    }
-
-    if (gzwrite(f, savestateData, savestateSize) != savestateSize)
-    {
-        main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Could not write data to state file: %s", filepath);
-        gzclose(f);
-        free(savestateData);
-        return 0;
-    }
-
-    gzclose(f);
-    free(savestateData);
-    main_message(M64MSG_STATUS, OSD_BOTTOM_LEFT, "Saved state to: %s", namefrompath(filepath));
     return 1;
 }
 
@@ -1151,7 +1266,10 @@ static int savestates_save_pj64(char *filepath, void *handle,
     PUTARRAY(rom, curr, unsigned int, 0x40/4);
     PUTDATA(curr, unsigned int, get_event(VI_INT) - reg_cop0[9]); // vi_timer
 #ifdef NEW_DYNAREC
-    PUTDATA(curr, unsigned int, pcaddr);
+    if (r4300emu == CORE_DYNAREC)
+        PUTDATA(curr, unsigned int, pcaddr);
+    else
+        PUTDATA(curr, unsigned int, PC->addr);
 #else
     PUTDATA(curr, unsigned int, PC->addr);
 #endif
@@ -1393,6 +1511,24 @@ int savestates_save(void)
         free(filepath);
     }
 
+    // deliver callback to indicate completion of state saving operation
+    StateChanged(M64CORE_STATE_SAVECOMPLETE, ret);
+
     savestates_clear_job();
     return ret;
+}
+
+void savestates_init(void)
+{
+    savestates_lock = SDL_CreateMutex();
+    if (!savestates_lock) {
+        DebugMessage(M64MSG_ERROR, "Could not create savestates list lock");
+        return;
+    }
+}
+
+void savestates_deinit(void)
+{
+    SDL_DestroyMutex(savestates_lock);
+    savestates_clear_job();
 }

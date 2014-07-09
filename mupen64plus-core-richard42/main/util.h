@@ -28,6 +28,7 @@ extern "C" {
 #endif
 
 #include <string.h>
+#include "osal/preproc.h"
 
 /**********************
      File utilities
@@ -64,7 +65,7 @@ file_status_t write_to_file(const char *filename, const void *data, size_t size)
  * added in relatively recent versions. In addition, GCC can detect the byte
  * swap code and optimize it with a high enough optimization level. */
 
-static inline unsigned short m64p_swap16(unsigned short x)
+static osal_inline unsigned short m64p_swap16(unsigned short x)
 {
     #ifdef _MSC_VER
     return _byteswap_ushort(x);
@@ -74,7 +75,7 @@ static inline unsigned short m64p_swap16(unsigned short x)
     #endif
 }
 
-static inline unsigned int m64p_swap32(unsigned int x)
+static osal_inline unsigned int m64p_swap32(unsigned int x)
 {
     #ifdef _MSC_VER
     return _byteswap_ulong(x); // long is always 32-bit in Windows
@@ -86,7 +87,7 @@ static inline unsigned int m64p_swap32(unsigned int x)
     #endif
 }
 
-static inline unsigned long long int m64p_swap64(unsigned long long int x)
+static osal_inline unsigned long long int m64p_swap64(unsigned long long int x)
 {
     #ifdef _MSC_VER
     return _byteswap_uint64(x);
@@ -125,30 +126,9 @@ void to_little_endian_buffer(void *buffer, size_t length, size_t count);
 void to_big_endian_buffer(void *buffer, size_t length, size_t count);
 
 /**********************
-  Linked list utilities
- **********************/
-typedef struct _list_node {
-    void *data;
-    struct _list_node *prev;
-    struct _list_node *next;
-} list_node_t;
-
-typedef list_node_t * list_t;
-
-list_node_t *list_prepend(list_t *list, void *data);
-list_node_t *list_append(list_t *list, void *data);
-void list_node_delete(list_t *list, list_node_t *node);
-void list_delete(list_t *list);
-list_node_t *list_find_node(list_t list, void *data);
-
-// cycles through each listnode in list setting curr_node to current node.
-#define list_foreach(list, curr_node) \
-    for((curr_node) = (list); (curr_node) != NULL; (curr_node) = (curr_node)->next)
-
-/**********************
      GUI utilities
  **********************/
-void countrycodestring(char countrycode, char *string);
+void countrycodestring(unsigned short countrycode, char *string);
 void imagestring(unsigned char imagetype, char *string);
 
 /**********************

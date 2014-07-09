@@ -105,7 +105,7 @@ static const char *get_savepathdefault(const char *configpath)
     }
 
     /* create directory if it doesn't exist */
-    osal_mkdirp(path, 0770);
+    osal_mkdirp(path, 0700);
 
     return path;
 }
@@ -194,6 +194,8 @@ int main_set_core_defaults(void)
     ConfigSetDefaultString(g_CoreConfig, "SaveStatePath", "", "Path to directory where emulator save states (snapshots) are saved. If this is blank, the default value of ${UserConfigPath}/save will be used");
     ConfigSetDefaultString(g_CoreConfig, "SaveSRAMPath", "", "Path to directory where SRAM/EEPROM data (in-game saves) are stored. If this is blank, the default value of ${UserConfigPath}/save will be used");
     ConfigSetDefaultString(g_CoreConfig, "SharedDataPath", "", "Path to a directory to search when looking for shared data files");
+    ConfigSetDefaultBool(g_CoreConfig, "DelaySI", 1, "Delay interrupt after DMA SI read/write");
+    ConfigSetDefaultInt(g_CoreConfig, "CountPerOp", 0, "Force number of cycles per emulated instruction");
 
     /* handle upgrades */
     if (bUpgrade)
@@ -434,6 +436,31 @@ m64p_error main_core_state_query(m64p_core_param param, int *rval)
         case M64CORE_SPEED_LIMITER:
             *rval = l_MainSpeedLimit;
             break;
+        case M64CORE_VIDEO_SIZE:
+        {
+            int width, height;
+            if (!g_EmulatorRunning)
+                return M64ERR_INVALID_STATE;
+            main_get_screen_size(&width, &height);
+            *rval = (width << 16) + height;
+            break;
+        }
+        case M64CORE_AUDIO_VOLUME:
+        {
+            if (!g_EmulatorRunning)
+                return M64ERR_INVALID_STATE;    
+            return main_volume_get_level(rval);
+        }
+        case M64CORE_AUDIO_MUTE:
+            *rval = main_volume_get_muted();
+            break;
+        case M64CORE_INPUT_GAMESHARK:
+            *rval = event_gameshark_active();
+            break;
+        // these are only used for callbacks; they cannot be queried or set
+        case M64CORE_STATE_LOADCOMPLETE:
+        case M64CORE_STATE_SAVECOMPLETE:
+            return M64ERR_INPUT_INVALID;
         default:
             return M64ERR_INPUT_INVALID;
     }
@@ -496,22 +523,47 @@ m64p_error main_core_state_set(m64p_core_param param, int val)
         case M64CORE_SPEED_LIMITER:
             main_set_speedlimiter(val);
             return M64ERR_SUCCESS;
+        case M64CORE_VIDEO_SIZE:
+        {
+            // the front-end app is telling us that the user has resized the video output frame, and so
+            // we should try to update the video plugin accordingly.  First, check state
+            int width, height;
+            if (!g_EmulatorRunning)
+                return M64ERR_INVALID_STATE;
+            width = (val >> 16) & 0xffff;
+            height = val & 0xffff;
+            // then call the video plugin.  if the video plugin supports resizing, it will resize its viewport and call
+            // VidExt_ResizeWindow to update the window manager handling our opengl output window
+            gfx.resizeVideoOutput(width, height);
+            return M64ERR_SUCCESS;
+        }
+        case M64CORE_AUDIO_VOLUME:
+            if (!g_EmulatorRunning)
+                return M64ERR_INVALID_STATE;
+            if (val < 0 || val > 100)
+                return M64ERR_INPUT_INVALID;
+            return main_volume_set_level(val);
+        case M64CORE_AUDIO_MUTE:
+            if ((main_volume_get_muted() && !val) || (!main_volume_get_muted() && val))
+                return main_volume_mute();
+            return M64ERR_SUCCESS;
+        case M64CORE_INPUT_GAMESHARK:
+            if (!g_EmulatorRunning)
+                return M64ERR_INVALID_STATE;
+            event_set_gameshark(val);
+            return M64ERR_SUCCESS;
+        // these are only used for callbacks; they cannot be queried or set
+        case M64CORE_STATE_LOADCOMPLETE:
+        case M64CORE_STATE_SAVECOMPLETE:
+            return M64ERR_INPUT_INVALID;
         default:
             return M64ERR_INPUT_INVALID;
     }
 }
 
-m64p_error main_get_screen_width(int *width)
+m64p_error main_get_screen_size(int *width, int *height)
 {
-    int height_trash;
-    gfx.readScreen(NULL, width, &height_trash, 0);
-    return M64ERR_SUCCESS;
-}
-
-m64p_error main_get_screen_height(int *height)
-{
-    int width_trash;
-    gfx.readScreen(NULL, &width_trash, height, 0);
+    gfx.readScreen(NULL, width, height, 0);
     return M64ERR_SUCCESS;
 }
 
@@ -524,15 +576,21 @@ m64p_error main_read_screen(void *pixels, int bFront)
 
 m64p_error main_volume_up(void)
 {
+    int level = 0;
     audio.volumeUp();
     main_draw_volume_osd();
+    main_volume_get_level(&level);
+    StateChanged(M64CORE_AUDIO_VOLUME, level);
     return M64ERR_SUCCESS;
 }
 
 m64p_error main_volume_down(void)
 {
+    int level = 0;
     audio.volumeDown();
     main_draw_volume_osd();
+    main_volume_get_level(&level);
+    StateChanged(M64CORE_AUDIO_VOLUME, level);
     return M64ERR_SUCCESS;
 }
 
@@ -546,6 +604,8 @@ m64p_error main_volume_set_level(int level)
 {
     audio.volumeSetLevel(level);
     main_draw_volume_osd();
+    level = audio.volumeGetLevel();
+    StateChanged(M64CORE_AUDIO_VOLUME, level);
     return M64ERR_SUCCESS;
 }
 
@@ -553,7 +613,13 @@ m64p_error main_volume_mute(void)
 {
     audio.volumeMute();
     main_draw_volume_osd();
+    StateChanged(M64CORE_AUDIO_MUTE, main_volume_get_muted());
     return M64ERR_SUCCESS;
+}
+
+int main_volume_get_muted(void)
+{
+    return (audio.volumeGetLevel() == 0);
 }
 
 m64p_error main_reset(int do_hard_reset)
@@ -670,6 +736,10 @@ m64p_error main_run(void)
     savestates_set_autoinc_slot(ConfigGetParamBool(g_CoreConfig, "AutoStateSlotIncrement"));
     savestates_select_slot(ConfigGetParamInt(g_CoreConfig, "CurrentStateSlot"));
     no_compiled_jump = ConfigGetParamBool(g_CoreConfig, "NoCompiledJump");
+    delay_si = ConfigGetParamBool(g_CoreConfig, "DelaySI");
+    count_per_op = ConfigGetParamInt(g_CoreConfig, "CountPerOp");
+    if (count_per_op <= 0)
+        count_per_op = ROM_PARAMS.countperop;
 
     // initialize memory, and do byte-swapping if it's not been done yet
     if (g_MemHasBeenBSwapped == 0)
@@ -697,7 +767,7 @@ m64p_error main_run(void)
     }
 
     /* set up the SDL key repeat and event filter to catch keyboard/joystick commands for the core */
-    //event_initialize();
+    event_initialize();
 
     /* initialize the on-screen display */
     if (ConfigGetParamBool(g_CoreConfig, "OnScreenDisplay"))
@@ -709,7 +779,7 @@ m64p_error main_run(void)
     }
 
     // setup rendering callback from video plugin to the core, for screenshots and On-Screen-Display
-    //gfx.setRenderingCallback(video_plugin_render_callback);
+    gfx.setRenderingCallback(video_plugin_render_callback);
 
 #ifdef WITH_LIRC
     lircStart();
@@ -747,13 +817,9 @@ m64p_error main_run(void)
     }
 
     rsp.romClosed();
-
     input.romClosed();
-
     audio.romClosed();
-
     gfx.romClosed();
-
     free_memory();
 
     // clean up
@@ -799,12 +865,3 @@ void main_stop(void)
     }
 #endif        
 }
-
-/*********************************************************************************************************
-* main function
-*/
-int main(int argc, char *argv[])
-{
-    return 1;
-}
-

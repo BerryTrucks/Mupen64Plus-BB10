@@ -134,6 +134,7 @@ endif
 #CC := $(CDIR)$(CPREFIX)gcc
 #CXX := C:/bbndk/host_10_0_9_52/win32/x86/usr/bin/qcc -V4.6.3,gcc_ntoarmv7le_cpp
 #CXX := C:/bbndk-2.1.0-beta1/host/win32/x86/usr/bin/qcc -V4.4.2,gcc_ntoarmv7le_cpp
+CXX := J:/bbndk10.2-Gold/host_10_1_0_238/win32/x86/usr/bin/qcc -V4.6.3,gcc_ntoarmv7le_cpp
 #CXX set by IDE
 RM       ?= rm -f
 INSTALL  ?= install
@@ -231,13 +232,17 @@ SOURCE = \
 	$(SRCDIR)/api/debugger.c \
 	$(SRCDIR)/api/frontend.c \
 	$(SRCDIR)/api/vidext.c \
-	$(SRCDIR)/main/main.c \
-	$(SRCDIR)/main/util.c \
 	$(SRCDIR)/main/cheat.c \
 	$(SRCDIR)/main/eventloop.c \
+	$(SRCDIR)/main/main.c \
 	$(SRCDIR)/main/md5.c \
 	$(SRCDIR)/main/rom.c \
 	$(SRCDIR)/main/savestates.c \
+    $(SRCDIR)/main/sdl_key_converter.c \
+	$(SRCDIR)/main/util.c \
+	$(SRCDIR)/main/zip/ioapi.c \
+	$(SRCDIR)/main/zip/unzip.c \
+	$(SRCDIR)/main/zip/zip.c \
 	$(SRCDIR)/memory/dma.c \
 	$(SRCDIR)/memory/flashram.c \
 	$(SRCDIR)/memory/memory.c \
@@ -246,24 +251,22 @@ SOURCE = \
 	$(SRCDIR)/memory/tlb.c \
 	$(SRCDIR)/osal/dynamiclib_unix.c \
 	$(SRCDIR)/osal/files_unix.c \
-	$(SRCDIR)/plugin/plugin.c \
-	$(SRCDIR)/plugin/dummy_video.c \
+    $(SRCDIR)/osd/screenshot.cpp \
 	$(SRCDIR)/plugin/dummy_audio.c \
 	$(SRCDIR)/plugin/dummy_input.c \
 	$(SRCDIR)/plugin/dummy_rsp.c \
-	$(SRCDIR)/r4300/r4300.c \
+	$(SRCDIR)/plugin/dummy_video.c \
+	$(SRCDIR)/plugin/plugin.c \
+	$(SRCDIR)/r4300/empty_dynarec.c \
 	$(SRCDIR)/r4300/exception.c \
 	$(SRCDIR)/r4300/interupt.c \
 	$(SRCDIR)/r4300/profile.c \
 	$(SRCDIR)/r4300/pure_interp.c \
+	$(SRCDIR)/r4300/r4300.c \
 	$(SRCDIR)/r4300/recomp.c \
 	$(SRCDIR)/r4300/reset.c \
-	$(SRCDIR)/r4300/empty_dynarec.c \
 	$(SRCDIR)/r4300/new_dynarec/linkage_arm.S \
-	$(SRCDIR)/r4300/new_dynarec/new_dynarec.c \
-	$(SRCDIR)/main/zip/ioapi.c \
-	$(SRCDIR)/main/zip/zip.c \
-	$(SRCDIR)/main/zip/unzip.c
+	$(SRCDIR)/r4300/new_dynarec/new_dynarec.c
 
 
 ifeq ($(DEBUGGER), 1)

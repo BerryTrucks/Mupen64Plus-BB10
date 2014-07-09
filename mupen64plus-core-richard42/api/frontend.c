@@ -44,6 +44,7 @@
 #include "main/savestates.h"
 #include "main/version.h"
 #include "main/util.h"
+#include "main/workqueue.h"
 #include "osd/screenshot.h"
 #include "plugin/plugin.h"
 
@@ -77,6 +78,8 @@ EXPORT m64p_error CALL CoreStartup(int APIVersion, const char *ConfigPath, const
     plugin_connect(M64PLUGIN_INPUT, NULL);
     plugin_connect(M64PLUGIN_CORE, NULL);
 
+    savestates_init();
+
     /* next, start up the configuration handling code by loading and parsing the config file */
     if (ConfigInit(ConfigPath, DataPath) != M64ERR_SUCCESS)
         return M64ERR_INTERNAL;
@@ -91,6 +94,8 @@ EXPORT m64p_error CALL CoreStartup(int APIVersion, const char *ConfigPath, const
     /* The ROM database contains MD5 hashes, goodnames, and some game-specific parameters */
     romdatabase_open();
 
+    workqueue_init();
+
     l_CoreInit = 1;
     return M64ERR_SUCCESS;
 }
@@ -103,7 +108,8 @@ EXPORT m64p_error CALL CoreShutdown(void)
     /* close down some core sub-systems */
     romdatabase_close();
     ConfigShutdown();
-    savestates_clear_job();
+    workqueue_shutdown();
+    savestates_deinit();
 
     /* tell SDL to shut down */
     SDL_Quit();
@@ -163,7 +169,7 @@ EXPORT m64p_error CALL CoreDoCommand(m64p_command Command, int ParamInt, void *P
             if (rval == M64ERR_SUCCESS)
             {
                 l_ROMOpen = 1;
-                //ScreenshotRomOpen();
+                ScreenshotRomOpen();
                 cheat_init();
             }
             return rval;
@@ -266,18 +272,6 @@ EXPORT m64p_error CALL CoreDoCommand(m64p_command Command, int ParamInt, void *P
                 return M64ERR_INVALID_STATE;
             main_take_next_screenshot();
             return M64ERR_SUCCESS;
-        case M64CMD_GET_SCREEN_WIDTH:
-            if (!g_EmulatorRunning)
-                return M64ERR_INVALID_STATE;
-            if (ParamPtr == NULL)
-                return M64ERR_INPUT_ASSERT;
-            return main_get_screen_width((int *)ParamPtr);
-        case M64CMD_GET_SCREEN_HEIGHT:
-            if (!g_EmulatorRunning)
-                return M64ERR_INVALID_STATE;
-            if (ParamPtr == NULL)
-                return M64ERR_INPUT_ASSERT;
-            return main_get_screen_height((int *)ParamPtr);
         case M64CMD_READ_SCREEN:
             if (!g_EmulatorRunning)
                 return M64ERR_INVALID_STATE;
@@ -286,30 +280,6 @@ EXPORT m64p_error CALL CoreDoCommand(m64p_command Command, int ParamInt, void *P
             if (ParamInt < 0 || ParamInt > 1)
                 return M64ERR_INPUT_INVALID;
             return main_read_screen(ParamPtr, ParamInt);
-        case M64CMD_VOLUME_UP:
-            if (!g_EmulatorRunning)
-                return M64ERR_INVALID_STATE;
-            return main_volume_up();
-        case M64CMD_VOLUME_DOWN:
-            if (!g_EmulatorRunning)
-                return M64ERR_INVALID_STATE;
-            return main_volume_down();
-        case M64CMD_VOLUME_GET_LEVEL:
-            if (!g_EmulatorRunning)
-                return M64ERR_INVALID_STATE;    
-            if (ParamPtr == NULL)
-                return M64ERR_INPUT_ASSERT;
-            return main_volume_get_level((int *)ParamPtr);
-        case M64CMD_VOLUME_SET_LEVEL:
-            if (!g_EmulatorRunning)
-                return M64ERR_INVALID_STATE;
-            if (ParamInt < 0 || ParamInt > 100)
-                return M64ERR_INPUT_INVALID;
-            return main_volume_set_level(ParamInt);
-        case M64CMD_VOLUME_MUTE:
-            if (!g_EmulatorRunning)
-                return M64ERR_INVALID_STATE;
-            return main_volume_mute();
         case M64CMD_RESET:
             if (!g_EmulatorRunning)
                 return M64ERR_INVALID_STATE;

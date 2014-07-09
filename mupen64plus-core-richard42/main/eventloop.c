@@ -22,10 +22,45 @@
 
 #include <stdlib.h>
 #include <SDL.h>
+#if ! SDL_VERSION_ATLEAST(1,3,0)
+
+#define SDL_SCANCODE_ESCAPE SDLK_ESCAPE
+#define SDL_NUM_SCANCODES SDLK_LAST
+#define SDL_SCANCODE_F5 SDLK_F5
+#define SDL_SCANCODE_F7 SDLK_F7
+#define SDL_SCANCODE_F9 SDLK_F9
+#define SDL_SCANCODE_F10 SDLK_F10
+#define SDL_SCANCODE_F11 SDLK_F11
+#define SDL_SCANCODE_F12 SDLK_F12
+#define SDL_SCANCODE_P SDLK_p
+#define SDL_SCANCODE_M SDLK_m
+#define SDL_SCANCODE_RIGHTBRACKET SDLK_RIGHTBRACKET
+#define SDL_SCANCODE_LEFTBRACKET SDLK_LEFTBRACKET
+#define SDL_SCANCODE_F SDLK_f
+#define SDL_SCANCODE_SLASH SDLK_SLASH
+#define SDL_SCANCODE_G SDLK_g
+#define SDL_SCANCODE_RETURN SDLK_RETURN
+#define SDL_SCANCODE_0 SDLK_0
+#define SDL_SCANCODE_1 SDLK_1
+#define SDL_SCANCODE_2 SDLK_2
+#define SDL_SCANCODE_3 SDLK_3
+#define SDL_SCANCODE_4 SDLK_4
+#define SDL_SCANCODE_5 SDLK_5
+#define SDL_SCANCODE_6 SDLK_6
+#define SDL_SCANCODE_7 SDLK_7
+#define SDL_SCANCODE_8 SDLK_8
+#define SDL_SCANCODE_9 SDLK_9
+#define SDL_SCANCODE_UNKNOWN SDLK_UNKNOWN
+
+#define SDL_SetEventFilter(func, data) SDL_SetEventFilter(func)
+#define event_sdl_filter(userdata, event) event_sdl_filter(const event)
+
+#endif
 
 #define M64P_CORE_PROTOTYPES 1
 #include "main.h"
 #include "eventloop.h"
+#include "sdl_key_converter.h"
 #include "util.h"
 #include "api/callbacks.h"
 #include "api/config.h"
@@ -91,7 +126,7 @@ static const int NumJoyCommands = sizeof(JoyCmdName) / sizeof(const char *);
 
 static int JoyCmdActive[16];  /* if extra joystick commands are added above, make sure there is enough room in this array */
 
-static int KbdGamesharkPressed = 0;
+static int GamesharkActive = 0;
 
 /*********************************************************************************************************
 * static functions for eventloop.c
@@ -208,7 +243,7 @@ static int MatchJoyCommand(const SDL_Event *event, eJoyCommand cmd)
 /*********************************************************************************************************
 * sdl event filter
 */
-static int event_sdl_filter(const SDL_Event *event)
+static int SDLCALL event_sdl_filter(void *userdata, SDL_Event *event)
 {
     int cmd, action;
 
@@ -220,11 +255,42 @@ static int event_sdl_filter(const SDL_Event *event)
             break;
 
         case SDL_KEYDOWN:
+#if SDL_VERSION_ATLEAST(1,3,0)
+            if (event->key.repeat)
+                return 0;
+
+            event_sdl_keydown(event->key.keysym.scancode, event->key.keysym.mod);
+#else
             event_sdl_keydown(event->key.keysym.sym, event->key.keysym.mod);
+#endif
             return 0;
         case SDL_KEYUP:
+#if SDL_VERSION_ATLEAST(1,3,0)
+            event_sdl_keyup(event->key.keysym.scancode, event->key.keysym.mod);
+#else
             event_sdl_keyup(event->key.keysym.sym, event->key.keysym.mod);
+#endif
             return 0;
+
+#if SDL_VERSION_ATLEAST(2,0,0)
+        case SDL_WINDOWEVENT:
+            switch (event->window.event) {
+                case SDL_WINDOWEVENT_RESIZED:
+                    // call the video plugin.  if the video plugin supports resizing, it will resize its viewport and call
+                    // VidExt_ResizeWindow to update the window manager handling our opengl output window
+                    gfx.resizeVideoOutput(event->window.data1, event->window.data2);
+                    return 0;  // consumed the event
+                    break;
+            }
+            break;
+#else
+        case SDL_VIDEORESIZE:
+            // call the video plugin.  if the video plugin supports resizing, it will resize its viewport and call
+            // VidExt_ResizeWindow to update the window manager handling our opengl output window
+            gfx.resizeVideoOutput(event->resize.w, event->resize.h);
+            return 0;  // consumed the event
+            break;
+#endif
 
         // if joystick action is detected, check if it's mapped to a special function
         case SDL_JOYAXISMOTION:
@@ -258,11 +324,15 @@ static int event_sdl_filter(const SDL_Event *event)
                         main_volume_up();
                     else if (cmd == joyForward)
                         main_set_fastforward(1);
+                    else if (cmd == joyGameshark)
+                        event_set_gameshark(1);
                 }
                 else if (action == -1) /* command was just de-activated (button up, etc) */
                 {
                     if (cmd == joyForward)
                         main_set_fastforward(0);
+                    else if (cmd == joyGameshark)
+                        event_set_gameshark(0);
                 }
             }
 
@@ -295,14 +365,20 @@ void event_initialize(void)
             int device = event_str[1] - '0';
             if (!SDL_WasInit(SDL_INIT_JOYSTICK))
                 SDL_InitSubSystem(SDL_INIT_JOYSTICK);
+#if SDL_VERSION_ATLEAST(2,0,0)
+            SDL_JoystickOpen(device);
+#else
             if (!SDL_JoystickOpened(device))
                 SDL_JoystickOpen(device);
+#endif
         }
     }
 
     /* set up SDL event filter and disable key repeat */
+#if !SDL_VERSION_ATLEAST(2,0,0)
     SDL_EnableKeyRepeat(0, 0);
-    SDL_SetEventFilter(event_sdl_filter);
+#endif
+    SDL_SetEventFilter(event_sdl_filter, NULL);
 }
 
 int event_set_core_defaults(void)
@@ -341,22 +417,22 @@ int event_set_core_defaults(void)
 
     ConfigSetDefaultFloat(l_CoreEventsConfig, "Version", CONFIG_PARAM_VERSION,  "Mupen64Plus CoreEvents config parameter set version number.  Please don't change this version number.");
     /* Keyboard presses mapped to core functions */
-    ConfigSetDefaultInt(l_CoreEventsConfig, kbdStop, SDLK_ESCAPE,          "SDL keysym for stopping the emulator");
-    ConfigSetDefaultInt(l_CoreEventsConfig, kbdFullscreen, SDLK_LAST,      "SDL keysym for switching between fullscreen/windowed modes");
-    ConfigSetDefaultInt(l_CoreEventsConfig, kbdSave, SDLK_F5,              "SDL keysym for saving the emulator state");
-    ConfigSetDefaultInt(l_CoreEventsConfig, kbdLoad, SDLK_F7,              "SDL keysym for loading the emulator state");
-    ConfigSetDefaultInt(l_CoreEventsConfig, kbdIncrement, 0,               "SDL keysym for advancing the save state slot");
-    ConfigSetDefaultInt(l_CoreEventsConfig, kbdReset, SDLK_F9,             "SDL keysym for resetting the emulator");
-    ConfigSetDefaultInt(l_CoreEventsConfig, kbdSpeeddown, SDLK_F10,        "SDL keysym for slowing down the emulator");
-    ConfigSetDefaultInt(l_CoreEventsConfig, kbdSpeedup, SDLK_F11,          "SDL keysym for speeding up the emulator");
-    ConfigSetDefaultInt(l_CoreEventsConfig, kbdScreenshot, SDLK_F12,       "SDL keysym for taking a screenshot");
-    ConfigSetDefaultInt(l_CoreEventsConfig, kbdPause, SDLK_p,              "SDL keysym for pausing the emulator");
-    ConfigSetDefaultInt(l_CoreEventsConfig, kbdMute, SDLK_m,               "SDL keysym for muting/unmuting the sound");
-    ConfigSetDefaultInt(l_CoreEventsConfig, kbdIncrease, SDLK_RIGHTBRACKET,"SDL keysym for increasing the volume");
-    ConfigSetDefaultInt(l_CoreEventsConfig, kbdDecrease, SDLK_LEFTBRACKET, "SDL keysym for decreasing the volume");
-    ConfigSetDefaultInt(l_CoreEventsConfig, kbdForward, SDLK_f,            "SDL keysym for temporarily going really fast");
-    ConfigSetDefaultInt(l_CoreEventsConfig, kbdAdvance, SDLK_SLASH,        "SDL keysym for advancing by one frame when paused");
-    ConfigSetDefaultInt(l_CoreEventsConfig, kbdGameshark, SDLK_g,          "SDL keysym for pressing the game shark button");
+    ConfigSetDefaultInt(l_CoreEventsConfig, kbdStop, sdl_native2keysym(SDL_SCANCODE_ESCAPE),          "SDL keysym for stopping the emulator");
+    ConfigSetDefaultInt(l_CoreEventsConfig, kbdFullscreen, sdl_native2keysym(SDL_NUM_SCANCODES),      "SDL keysym for switching between fullscreen/windowed modes");
+    ConfigSetDefaultInt(l_CoreEventsConfig, kbdSave, sdl_native2keysym(SDL_SCANCODE_F5),              "SDL keysym for saving the emulator state");
+    ConfigSetDefaultInt(l_CoreEventsConfig, kbdLoad, sdl_native2keysym(SDL_SCANCODE_F7),              "SDL keysym for loading the emulator state");
+    ConfigSetDefaultInt(l_CoreEventsConfig, kbdIncrement, sdl_native2keysym(SDL_SCANCODE_UNKNOWN),    "SDL keysym for advancing the save state slot");
+    ConfigSetDefaultInt(l_CoreEventsConfig, kbdReset, sdl_native2keysym(SDL_SCANCODE_F9),             "SDL keysym for resetting the emulator");
+    ConfigSetDefaultInt(l_CoreEventsConfig, kbdSpeeddown, sdl_native2keysym(SDL_SCANCODE_F10),        "SDL keysym for slowing down the emulator");
+    ConfigSetDefaultInt(l_CoreEventsConfig, kbdSpeedup, sdl_native2keysym(SDL_SCANCODE_F11),          "SDL keysym for speeding up the emulator");
+    ConfigSetDefaultInt(l_CoreEventsConfig, kbdScreenshot, sdl_native2keysym(SDL_SCANCODE_F12),       "SDL keysym for taking a screenshot");
+    ConfigSetDefaultInt(l_CoreEventsConfig, kbdPause, sdl_native2keysym(SDL_SCANCODE_P),              "SDL keysym for pausing the emulator");
+    ConfigSetDefaultInt(l_CoreEventsConfig, kbdMute, sdl_native2keysym(SDL_SCANCODE_M),               "SDL keysym for muting/unmuting the sound");
+    ConfigSetDefaultInt(l_CoreEventsConfig, kbdIncrease, sdl_native2keysym(SDL_SCANCODE_RIGHTBRACKET),"SDL keysym for increasing the volume");
+    ConfigSetDefaultInt(l_CoreEventsConfig, kbdDecrease, sdl_native2keysym(SDL_SCANCODE_LEFTBRACKET), "SDL keysym for decreasing the volume");
+    ConfigSetDefaultInt(l_CoreEventsConfig, kbdForward, sdl_native2keysym(SDL_SCANCODE_F),            "SDL keysym for temporarily going really fast");
+    ConfigSetDefaultInt(l_CoreEventsConfig, kbdAdvance, sdl_native2keysym(SDL_SCANCODE_SLASH),        "SDL keysym for advancing by one frame when paused");
+    ConfigSetDefaultInt(l_CoreEventsConfig, kbdGameshark, sdl_native2keysym(SDL_SCANCODE_G),          "SDL keysym for pressing the game shark button");
     /* Joystick events mapped to core functions */
     ConfigSetDefaultString(l_CoreEventsConfig, JoyCmdName[joyStop], "",       "Joystick event string for stopping the emulator");
     ConfigSetDefaultString(l_CoreEventsConfig, JoyCmdName[joyFullscreen], "", "Joystick event string for switching between fullscreen/windowed modes");
@@ -377,50 +453,80 @@ int event_set_core_defaults(void)
     return 1;
 }
 
+static int get_saveslot_from_keysym(int keysym)
+{
+    switch (keysym) {
+    case SDL_SCANCODE_0:
+        return 0;
+    case SDL_SCANCODE_1:
+        return 1;
+    case SDL_SCANCODE_2:
+        return 2;
+    case SDL_SCANCODE_3:
+        return 3;
+    case SDL_SCANCODE_4:
+        return 4;
+    case SDL_SCANCODE_5:
+        return 5;
+    case SDL_SCANCODE_6:
+        return 6;
+    case SDL_SCANCODE_7:
+        return 7;
+    case SDL_SCANCODE_8:
+        return 8;
+    case SDL_SCANCODE_9:
+        return 9;
+    default:
+        return -1;
+    }
+}
+
 /*********************************************************************************************************
 * sdl keyup/keydown handlers
 */
 
 void event_sdl_keydown(int keysym, int keymod)
 {
+    int slot;
+
     /* check for the only 2 hard-coded key commands: Alt-enter for fullscreen and 0-9 for save state slot */
-    if (keysym == SDLK_RETURN && keymod & (KMOD_LALT | KMOD_RALT))
+    if (keysym == SDL_SCANCODE_RETURN && keymod & (KMOD_LALT | KMOD_RALT))
         gfx.changeWindow();
-    else if (keysym >= SDLK_0 && keysym <= SDLK_9)
-        main_state_set_slot(keysym - SDLK_0);
+    else if ((slot = get_saveslot_from_keysym(keysym)) >= 0)
+        main_state_set_slot(slot);
     /* check all of the configurable commands */
-    else if (keysym == ConfigGetParamInt(l_CoreEventsConfig, kbdStop))
+    else if (keysym == sdl_keysym2native(ConfigGetParamInt(l_CoreEventsConfig, kbdStop)))
         main_stop();
-    else if (keysym == ConfigGetParamInt(l_CoreEventsConfig, kbdFullscreen))
+    else if (keysym == sdl_keysym2native(ConfigGetParamInt(l_CoreEventsConfig, kbdFullscreen)))
         gfx.changeWindow();
-    else if (keysym == ConfigGetParamInt(l_CoreEventsConfig, kbdSave))
+    else if (keysym == sdl_keysym2native(ConfigGetParamInt(l_CoreEventsConfig, kbdSave)))
         main_state_save(0, NULL); /* save in mupen64plus format using current slot */
-    else if (keysym == ConfigGetParamInt(l_CoreEventsConfig, kbdLoad))
+    else if (keysym == sdl_keysym2native(ConfigGetParamInt(l_CoreEventsConfig, kbdLoad)))
         main_state_load(NULL); /* load using current slot */
-    else if (keysym == ConfigGetParamInt(l_CoreEventsConfig, kbdIncrement))
+    else if (keysym == sdl_keysym2native(ConfigGetParamInt(l_CoreEventsConfig, kbdIncrement)))
         main_state_inc_slot();
-    else if (keysym == ConfigGetParamInt(l_CoreEventsConfig, kbdReset))
+    else if (keysym == sdl_keysym2native(ConfigGetParamInt(l_CoreEventsConfig, kbdReset)))
         reset_soft();
-    else if (keysym == ConfigGetParamInt(l_CoreEventsConfig, kbdSpeeddown))
+    else if (keysym == sdl_keysym2native(ConfigGetParamInt(l_CoreEventsConfig, kbdSpeeddown)))
         main_speeddown(5);
-    else if (keysym == ConfigGetParamInt(l_CoreEventsConfig, kbdSpeedup))
+    else if (keysym == sdl_keysym2native(ConfigGetParamInt(l_CoreEventsConfig, kbdSpeedup)))
         main_speedup(5);
-    else if (keysym == ConfigGetParamInt(l_CoreEventsConfig, kbdScreenshot))
+    else if (keysym == sdl_keysym2native(ConfigGetParamInt(l_CoreEventsConfig, kbdScreenshot)))
         main_take_next_screenshot();    /* screenshot will be taken at the end of frame rendering */
-    else if (keysym == ConfigGetParamInt(l_CoreEventsConfig, kbdPause))
+    else if (keysym == sdl_keysym2native(ConfigGetParamInt(l_CoreEventsConfig, kbdPause)))
         main_toggle_pause();
-    else if (keysym == ConfigGetParamInt(l_CoreEventsConfig, kbdMute))
+    else if (keysym == sdl_keysym2native(ConfigGetParamInt(l_CoreEventsConfig, kbdMute)))
         main_volume_mute();
-    else if (keysym == ConfigGetParamInt(l_CoreEventsConfig, kbdIncrease))
+    else if (keysym == sdl_keysym2native(ConfigGetParamInt(l_CoreEventsConfig, kbdIncrease)))
         main_volume_up();
-    else if (keysym == ConfigGetParamInt(l_CoreEventsConfig, kbdDecrease))
+    else if (keysym == sdl_keysym2native(ConfigGetParamInt(l_CoreEventsConfig, kbdDecrease)))
         main_volume_down();
-    else if (keysym == ConfigGetParamInt(l_CoreEventsConfig, kbdForward))
+    else if (keysym == sdl_keysym2native(ConfigGetParamInt(l_CoreEventsConfig, kbdForward)))
         main_set_fastforward(1);
-    else if (keysym == ConfigGetParamInt(l_CoreEventsConfig, kbdAdvance))
+    else if (keysym == sdl_keysym2native(ConfigGetParamInt(l_CoreEventsConfig, kbdAdvance)))
         main_advance_one();
-    else if (keysym == ConfigGetParamInt(l_CoreEventsConfig, kbdGameshark))
-        KbdGamesharkPressed = 1;
+    else if (keysym == sdl_keysym2native(ConfigGetParamInt(l_CoreEventsConfig, kbdGameshark)))
+        event_set_gameshark(1);
     else
     {
         /* pass all other keypresses to the input plugin */
@@ -431,17 +537,17 @@ void event_sdl_keydown(int keysym, int keymod)
 
 void event_sdl_keyup(int keysym, int keymod)
 {
-    if (keysym == ConfigGetParamInt(l_CoreEventsConfig, kbdStop))
+    if (keysym == sdl_keysym2native(ConfigGetParamInt(l_CoreEventsConfig, kbdStop)))
     {
         return;
     }
-    else if (keysym == ConfigGetParamInt(l_CoreEventsConfig, kbdForward))
+    else if (keysym == sdl_keysym2native(ConfigGetParamInt(l_CoreEventsConfig, kbdForward)))
     {
         main_set_fastforward(0);
     }
-    else if (keysym == ConfigGetParamInt(l_CoreEventsConfig, kbdGameshark))
+    else if (keysym == sdl_keysym2native(ConfigGetParamInt(l_CoreEventsConfig, kbdGameshark)))
     {
-        KbdGamesharkPressed = 0;
+        event_set_gameshark(0);
     }
     else input.keyUp(keymod, keysym);
 
@@ -449,7 +555,19 @@ void event_sdl_keyup(int keysym, int keymod)
 
 int event_gameshark_active(void)
 {
-    return KbdGamesharkPressed || JoyCmdActive[joyGameshark];
+    return GamesharkActive;
 }
 
+void event_set_gameshark(int active)
+{
+    // if boolean value doesn't change then just return
+    if (!active == !GamesharkActive)
+        return;
+
+    // set the button state
+    GamesharkActive = (active ? 1 : 0);
+
+    // notify front-end application that gameshark button state has changed
+    StateChanged(M64CORE_INPUT_GAMESHARK, GamesharkActive);
+}
 

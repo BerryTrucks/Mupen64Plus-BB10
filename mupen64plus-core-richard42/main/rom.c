@@ -37,6 +37,7 @@
 #include "util.h"
 
 #include "memory/memory.h"
+#include "r4300/r4300.h"
 #include "osal/preproc.h"
 #include "osd/osd.h"
 
@@ -59,7 +60,7 @@ m64p_rom_header   ROM_HEADER;
 rom_params        ROM_PARAMS;
 m64p_rom_settings ROM_SETTINGS;
 
-static m64p_system_type rom_country_code_to_system_type(char country_code);
+static m64p_system_type rom_country_code_to_system_type(unsigned short country_code);
 static int rom_system_type_to_ai_dac_rate(m64p_system_type system_type);
 static int rom_system_type_to_vi_limit(m64p_system_type system_type);
 
@@ -163,6 +164,7 @@ m64p_error open_rom(const unsigned char* romimage, unsigned int size)
     ROM_PARAMS.systemtype = rom_country_code_to_system_type(ROM_HEADER.Country_code);
     ROM_PARAMS.vilimit = rom_system_type_to_vi_limit(ROM_PARAMS.systemtype);
     ROM_PARAMS.aidacrate = rom_system_type_to_ai_dac_rate(ROM_PARAMS.systemtype);
+    ROM_PARAMS.countperop = COUNT_PER_OP_DEFAULT;
 
     memcpy(ROM_PARAMS.headername, ROM_HEADER.Name, 20);
     ROM_PARAMS.headername[20] = '\0';
@@ -178,6 +180,7 @@ m64p_error open_rom(const unsigned char* romimage, unsigned int size)
         ROM_SETTINGS.status = entry->status;
         ROM_SETTINGS.players = entry->players;
         ROM_SETTINGS.rumble = entry->rumble;
+        ROM_PARAMS.countperop = entry->countperop;
     }
     else
     {
@@ -187,6 +190,7 @@ m64p_error open_rom(const unsigned char* romimage, unsigned int size)
         ROM_SETTINGS.status = 0;
         ROM_SETTINGS.players = 0;
         ROM_SETTINGS.rumble = 0;
+        ROM_PARAMS.countperop = COUNT_PER_OP_DEFAULT;
     }
 
     /* print out a bunch of info about the ROM */
@@ -236,9 +240,9 @@ m64p_error close_rom(void)
 /* ROM utility functions */
 
 // Get the system type associated to a ROM country code.
-static m64p_system_type rom_country_code_to_system_type(char country_code)
+static m64p_system_type rom_country_code_to_system_type(unsigned short country_code)
 {
-    switch (country_code)
+    switch (country_code & 0xFF)
     {
         // PAL codes
         case 0x44:
@@ -355,6 +359,7 @@ void romdatabase_open(void)
             search->entry.savetype = DEFAULT;
             search->entry.players = DEFAULT;
             search->entry.rumble = DEFAULT; 
+            search->entry.countperop = COUNT_PER_OP_DEFAULT;
 
             search->next_entry = NULL;
             search->next_crc = NULL;
@@ -445,6 +450,13 @@ void romdatabase_open(void)
                 else
                     DebugMessage(M64MSG_WARNING, "ROM Database: Invalid rumble string on line %i", lineno);
             }
+            else if(!strcmp(l.name, "CountPerOp"))
+            {
+                if (string_to_int(l.value, &value) && value > 0 && value <= 4)
+                    search->entry.countperop = value;
+                else
+                    DebugMessage(M64MSG_WARNING, "ROM Database: Invalid CountPerOp on line %i", lineno);
+            }
             else
             {
                 DebugMessage(M64MSG_WARNING, "ROM Database: Unknown property on line %i", lineno);
@@ -473,6 +485,8 @@ void romdatabase_open(void)
                     search->entry.players = ref->players;
                 if(ref->rumble!=DEFAULT)
                     search->entry.rumble = ref->rumble;
+                if (ref->countperop != COUNT_PER_OP_DEFAULT)
+                    search->entry.countperop = ref->countperop;
             }
             else
                 DebugMessage(M64MSG_WARNING, "ROM Database: Error solving RefMD5s");

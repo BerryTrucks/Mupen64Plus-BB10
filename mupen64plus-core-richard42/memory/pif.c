@@ -49,7 +49,7 @@ static char *get_eeprom_path(void)
 
 static void eeprom_format(void)
 {
-    memset(eeprom, 0, sizeof(eeprom));
+    memset(eeprom, 0xff, sizeof(eeprom));
 }
 
 static void eeprom_read_file(void)
@@ -186,7 +186,7 @@ static unsigned char byte2bcd(int n)
 static void EepromCommand(unsigned char *Command)
 {
     time_t curtime_time;
-    struct tm curtime;
+    struct tm *curtime;
 
     switch (Command[2])
     {
@@ -255,19 +255,15 @@ static void EepromCommand(unsigned char *Command)
             break;
         case 2:
             time(&curtime_time);
-#if defined(WIN32)
-            localtime_s(&curtime, &curtime_time);
-#else
-            localtime_r(&curtime_time, &curtime);
-#endif
-            Command[4] = byte2bcd(curtime.tm_sec);
-            Command[5] = byte2bcd(curtime.tm_min);
-            Command[6] = 0x80 + byte2bcd(curtime.tm_hour);
-            Command[7] = byte2bcd(curtime.tm_mday);
-            Command[8] = byte2bcd(curtime.tm_wday);
-            Command[9] = byte2bcd(curtime.tm_mon + 1);
-            Command[10] = byte2bcd(curtime.tm_year);
-            Command[11] = byte2bcd(curtime.tm_year / 100);
+            curtime = localtime(&curtime_time);
+            Command[4] = byte2bcd(curtime->tm_sec);
+            Command[5] = byte2bcd(curtime->tm_min);
+            Command[6] = 0x80 + byte2bcd(curtime->tm_hour);
+            Command[7] = byte2bcd(curtime->tm_mday);
+            Command[8] = byte2bcd(curtime->tm_wday);
+            Command[9] = byte2bcd(curtime->tm_mon + 1);
+            Command[10] = byte2bcd(curtime->tm_year);
+            Command[11] = byte2bcd(curtime->tm_year / 100);
             Command[12] = 0x00;	// status
             break;
         }
@@ -324,7 +320,7 @@ static void internal_ReadController(int Control, unsigned char *Command)
         if (Controls[Control].Present)
         {
             if (Controls[Control].Plugin == PLUGIN_RAW)
-                if (input.controllerCommand)
+                if (input.readController)
                     input.readController(Control, Command);
         }
         break;
@@ -335,7 +331,7 @@ static void internal_ReadController(int Control, unsigned char *Command)
         if (Controls[Control].Present)
         {
             if (Controls[Control].Plugin == PLUGIN_RAW)
-                if (input.controllerCommand)
+                if (input.readController)
                     input.readController(Control, Command);
         }
         break;
@@ -496,6 +492,8 @@ void update_pif_write(void)
             }
             // calculate the proper response for the given challenge (X-Scale's algorithm)
             n64_cic_nus_6105(challenge, response, CHL_LEN - 2);
+            PIF_RAMb[46] = 0;
+            PIF_RAMb[47] = 0;
             // re-format the 'response' into a byte stream
             for (i = 0; i < 15; i++)
             {
