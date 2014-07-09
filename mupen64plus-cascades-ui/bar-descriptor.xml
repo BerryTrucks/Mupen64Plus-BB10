@@ -39,7 +39,7 @@
 
     <!-- Fourth digit segment of the package version. First three segments are taken from the
          <versionNumber> element.  Must be an integer from 0 to 2^16-1 -->
-    <buildId>1</buildId>
+    <buildId>3</buildId>
 
     <!-- A string value (such as "v1", "2.5", or "Alpha 1") that represents the version of the application, as it should be shown to users. Optional. -->
     <!-- <versionLabel></versionLabel> -->
@@ -53,6 +53,11 @@
     <!--  Name of author which is used for signing. Must match the developer name of your development certificate. -->
     <author>None</author>
     <authorId>gYAAgLo66qdtMcSl7Gcx45McYxc</authorId>
+    <splashScreens>
+       <image>splash720x720.png</image>
+       <image>splash768x1280.png</image>
+       <image>splash720x1280.png</image>
+    </splashScreens>
     <category>core.games</category>
     <icon>
        <image>Mupen64plusIcon.png</image>
@@ -115,7 +120,19 @@
     	</icon>
     </invoke-target>
 
-    <!--  The icon for the application, which should be 114x114. -->
+    <invoke-target id="com.emulator.mupen64p.load">
+    	<invoke-target-type>application</invoke-target-type>
+    	<invoke-target-name>Mupen64+</invoke-target-name>
+    	<filter>
+    		<action>bb.action.OPEN</action>
+    		<mime-type>*</mime-type>
+    		<property var="types" value="*" />
+    		<property var="uris" value="m64://" />
+    	</filter>
+    	<icon>
+    		<image>Mupen64plusIcon.png</image>
+    	</icon>
+    </invoke-target>
 
     <asset path="assets">assets</asset>
 
@@ -124,28 +141,37 @@
         <include name="*.qm"/>
     </asset>
     <asset path="Mupen64plusIcon.png">Mupen64plusIcon.png</asset>
-    <asset path="lib/gles2n64.so" type="Qnx/Elf">lib/gles2n64.so</asset>
-    <asset path="lib/libmupen64plus.so.2" type="Qnx/Elf">lib/libmupen64plus.so.2</asset>
-    <asset path="lib/libmupen64plus-input-bb.so" type="Qnx/Elf">lib/libmupen64plus-input-bb.so</asset>
-    <asset path="lib/libmupen64plus-rsp-hle.so" type="Qnx/Elf">lib/libmupen64plus-rsp-hle.so</asset>
-    <asset path="lib/libmupen64plus-video-rice.so" type="Qnx/Elf">lib/libmupen64plus-video-rice.so</asset>
-    <asset path="lib/libSDL12.so" type="Qnx/Elf">lib/libSDL12.so</asset>
     <asset path="lib/libtco.so" type="Qnx/Elf">lib/libtco.so</asset>
-    <asset path="lib/mupen64plus-audio-sdl.so" type="Qnx/Elf">lib/mupen64plus-audio-sdl.so</asset>
+    <asset path="lib/libSDL12.so" type="Qnx/Elf">lib/libSDL12.so</asset>
+    <asset path="lib/gles2n64.so" type="Qnx/Elf">lib/gles2n64.so</asset>
     <asset path="lib/rsp-no-sound.so" type="Qnx/Elf">lib/rsp-no-sound.so</asset>
-    <asset path="data/InputAutoCfg.ini">InputAutoCfg.ini</asset>
-    <asset path="data/mupen64plus.cfg">mupen64plus.cfg.2</asset>
+    <asset path="lib/libmupen64plus.so.2" type="Qnx/Elf">lib/libmupen64plus.so.2</asset>
+    <asset path="lib/mupen64plus-audio-sdl.so" type="Qnx/Elf">lib/mupen64plus-audio-sdl.so</asset>
+    <asset path="lib/libmupen64plus-rsp-hle.so" type="Qnx/Elf">lib/libmupen64plus-rsp-hle.so</asset>
+    <asset path="lib/libmupen64plus-input-bb.so" type="Qnx/Elf">lib/libmupen64plus-input-bb.so</asset>
+    <asset path="lib/libmupen64plus-video-rice.so" type="Qnx/Elf">lib/libmupen64plus-video-rice.so</asset>
+    <asset path="lib/mupen64plus-video-glide64mk2.so" type="Qnx/Elf">lib/mupen64plus-video-glide64mk2.so</asset>
+    <asset path="data/mupencheat.txt">mupencheat.txt</asset>
+    <asset path="data/Glide64mk2.ini">Glide64mk2.ini</asset>
     <asset path="data/mupen64plus.cht">mupen64plus.cht</asset>
     <asset path="data/mupen64plus.ini">mupen64plus.ini</asset>
-    <asset path="data/mupencheat.txt">mupencheat.txt</asset>
+    <asset path="data/InputAutoCfg.ini">InputAutoCfg.ini</asset>
+    <asset path="data/mupen64plus.cfg">mupen64plus.cfg.2</asset>
     <asset path="data/RiceVideoLinux.ini">RiceVideoLinux.ini</asset>
-    <asset path="lib/mupen64plus-video-glide64mk2.so" type="Qnx/Elf">lib/mupen64plus-video-glide64mk2.so</asset>
-    <asset path="data/Glide64mk2.ini">Glide64mk2.ini</asset>
+    <asset path="data/gln64.conf.psp">data/gln64.conf.psp</asset>
+    <asset path="data/gln64.conf.Q10">data/gln64.conf.Q10</asset>
+    <asset path="data/gln64.conf.Z10">data/gln64.conf.Z10</asset>
+    <asset path="data/gln64.conf.Z30">data/gln64.conf.Z30</asset>
+    <asset path="data/gln64rom.conf">gln64rom.conf</asset>
+    <asset path="splash720x720.png">splash720x720.png</asset>
+    <asset path="splash768x1280.png">splash768x1280.png</asset>
+    <asset path="splash720x1280.png">splash720x1280.png</asset>
 
     <!-- Request permission to execute native code.  Required for native applications. -->
     <permission system="true">run_native</permission>
     <permission>access_shared</permission>
     <permission>use_gamepad</permission>
+	<permission>narrow_landscape_exit</permission>
     <env var="LD_LIBRARY_PATH" value="app/native/lib:/usr/lib/qt4/lib"/>
 
 </qnx>
