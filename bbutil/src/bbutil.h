@@ -73,7 +73,8 @@ extern int hdmi_height;
 extern bool use_hdmi;
 extern bool use_overlay;
 extern bool dbg_fps;
-extern bool q10_rotate;
+extern int q10_rotate;
+extern bool use_gamepad;
 
 typedef struct
 {
