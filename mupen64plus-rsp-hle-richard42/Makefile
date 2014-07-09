@@ -27,7 +27,7 @@ SHARED = -shared
 SO_EXTENSION = so
 
 # source and output dirs
-SRCDIR ?= .
+SRCDIR ?= ./src
 OBJDIR = _obj
 
 # base CFLAGS, LDLIBS, and LDFLAGS
@@ -118,7 +118,7 @@ endif
 endif
 
 #CXX := C:/bbndk/host_10_0_9_52/win32/x86/usr/bin/qcc -V4.6.3,gcc_ntoarmv7le_cpp
-#CXX := C:/bbndk-2.1.0-beta1/host/win32/x86/usr/bin/qcc -V4.4.2,gcc_ntoarmv7le_cpp
+CXX := J:/bbndk10.2-Gold/host_10_1_0_238/win32/x86/usr/bin/qcc -V4.6.3,gcc_ntoarmv7le_cpp
 #CXX set by IDE
 RM       ?= rm -f
 INSTALL  ?= install
@@ -148,13 +148,16 @@ endif
 
 # list of source files to compile
 SOURCE = \
-	$(SRCDIR)/main.c \
+	$(SRCDIR)/alist.c \
+    $(SRCDIR)/audio.c \
+	$(SRCDIR)/cicx105.c \
 	$(SRCDIR)/jpeg.c \
-	$(SRCDIR)/idct.c \
-	$(SRCDIR)/ucode3.cpp \
-	$(SRCDIR)/ucode2.cpp \
-	$(SRCDIR)/ucode1.cpp \
-	$(SRCDIR)/ucode3mp3.cpp
+	$(SRCDIR)/main.c \
+    $(SRCDIR)/musyx.c \
+	$(SRCDIR)/ucode1.c \
+	$(SRCDIR)/ucode2.c \
+	$(SRCDIR)/ucode3.c \
+	$(SRCDIR)/ucode3mp3.c
 
 # generate a list of object files build, make a temporary directory for them
 OBJECTS := $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(filter %.c, $(SOURCE)))
@@ -163,7 +166,7 @@ OBJDIRS = $(dir $(OBJECTS))
 $(shell $(MKDIR) $(OBJDIRS))
 
 # build targets
-TARGET = ../mupen64plus-cascades-ui/lib/libmupen64plus-rsp-hle.$(SO_EXTENSION)
+TARGET = libmupen64plus-rsp-hle.$(SO_EXTENSION)
 
 targets:
 	@echo "Mupen64Plus-rsp-hle makefile. "
