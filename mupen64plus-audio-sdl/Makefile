@@ -34,14 +34,14 @@ CPU := NONE
 PIC=1
 
 # base CFLAGS, LDLIBS, and LDFLAGS
-OPTFLAGS ?= -O0 -g
+OPTFLAGS ?= -O3
 CFLAGS += $(OPTFLAGS) -ffast-math -fno-strict-aliasing -fvisibility=hidden -I../../src -w1 -shared -marm
 LDFLAGS += $(SHARED)
 
 CFLAGS += -fPIC
 LDFLAGS += -fPIC
 
-CFLAGS  += -I../blackberry-SDL/include
+CFLAGS  += -I../blackberry-SDL/include -DUSE_SRC
 LDLIBS += -L../blackberry-SDL/Device-Debug -lSDL12
 
 CFLAGS  += -I..//mupen64plus-core-richard42/api
@@ -49,6 +49,8 @@ CFLAGS  += -I..//mupen64plus-core-richard42/api
 # set base program pointers and flags
 #CC_OVERRIDE = C:/bbndk/host_10_0_9_52/win32/x86/usr/bin/qcc -V4.6.3,gcc_ntoarmv7le_cpp -w1 -shared
 #CC_OVERRIDE = C:/bbndk-2.1.0-beta1/host/win32/x86/usr/bin/qcc -V4.4.2,gcc_ntoarmv7le_cpp -w1 -shared
+CC := J:/bbndk10.2-Gold/host_10_1_0_238/win32/x86/usr/bin/qcc -V4.6.3,gcc_ntoarmv7le
+CXX := J:/bbndk10.2-Gold/host_10_1_0_238/win32/x86/usr/bin/qcc -V4.6.3,gcc_ntoarmv7le_cpp
 CC_OVERRIDE = $(CXX)
 
 CC = $(CC_OVERRIDE)
@@ -62,13 +64,17 @@ LINK.o = $(CC) $(LDFLAGS)
 SOURCE = \
 	main.c \
 	volume.c \
-	osal_dynamiclib_unix.c
+	osal_dynamiclib_unix.c \
+	samplerate.c \
+	src_linear.c \
+	src_sinc.c \
+	src_zoh.c
 
 # generate a list of object files build, make a temporary directory for them
 #OBJDIRS = _obj
 OBJDIRS = .
 $(shell $(MKDIR) $(OBJDIRS))
-OBJECTS := $(OBJDIRS)/main.o $(OBJDIRS)/volume.o $(OBJDIRS)/osal_dynamiclib_unix.o
+OBJECTS := $(OBJDIRS)/main.o $(OBJDIRS)/volume.o $(OBJDIRS)/osal_dynamiclib_unix.o $(OBJDIRS)/samplerate.o $(OBJDIRS)/src_linear.o $(OBJDIRS)/src_sinc.o $(OBJDIRS)/src_zoh.o
 
 # build dependency files
 CFLAGS += -MD
