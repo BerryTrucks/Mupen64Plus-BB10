@@ -17,6 +17,11 @@
 
 #include <History/Game.hpp>
 
+#include "settings/M64PSettings.hpp"
+
+#include "emulator.h"
+#include "bbutil.h"
+
 #include <bb/cascades/Application>
 #include <bb/cascades/Container>
 #include <bb/cascades/DataModel>
@@ -25,8 +30,8 @@
 #include <bb/cascades/TabbedPane>
 #include <bb/cascades/ActionBarPlacement>
 #include <bb/system/InvokeRequest>
-#include "emulator.h"
-#include "bbutil.h"
+#include <bb/system/SystemUiResult>
+
 #include <QThread>
 #include <QSettings>
 #include <QTimer>
@@ -51,8 +56,6 @@ class Frontend: public QThread
     Q_PROPERTY(QString rom READ getRom WRITE setRom NOTIFY romChanged)
     Q_PROPERTY(QString startDirectory READ getStartDirectory WRITE setStartDirectory NOTIFY dummySignal)
     Q_PROPERTY(bool hasStartDirectory READ hasStartDirectory CONSTANT)
-    Q_PROPERTY(int video READ getVideo WRITE setVideo NOTIFY videoChanged)
-    Q_PROPERTY(int audio READ getAudio WRITE setAudio NOTIFY audioChanged)
     Q_PROPERTY(ImageLoader* boxart READ getBoxArt NOTIFY boxArtChanged)
     Q_PROPERTY(bool boxartLoaded READ boxartLoaded NOTIFY boxartLoadedChanged)
     Q_PROPERTY(bool Keyboard READ hasKeyboard CONSTANT)
@@ -64,32 +67,21 @@ class Frontend: public QThread
 	Q_PROPERTY(bb::cascades::DataModel* devices READ devices CONSTANT)
 	Q_PROPERTY(bb::cascades::DataModel* history READ history CONSTANT)
 	Q_PROPERTY(bool hasHistory READ hasHistory CONSTANT)
-	Q_PROPERTY(bool saveHistory READ saveHistory WRITE saveHistory NOTIFY dummySignal)
 	Q_PROPERTY(int menuOffset READ menuOffset WRITE menuOffset NOTIFY menuOffsetChanged)
 	Q_PROPERTY(bool debugMode READ debugMode CONSTANT)
 	Q_PROPERTY(QString coverImage READ coverImage NOTIFY coverImageChanged)
 	Q_PROPERTY(QString version READ version CONSTANT)
-	Q_PROPERTY(QString lastROM READ lastROM CONSTANT)
+	Q_PROPERTY(QString compileDate READ compileDate CONSTANT)
 	Q_PROPERTY(QString currentROM READ currentROM NOTIFY currentROMChanged)
 	Q_PROPERTY(bool isOSThree READ isOSThree CONSTANT)
 	Q_PROPERTY(bb::cascades::ActionBarPlacement::Type playPlacement READ playPlacement CONSTANT)
-    Q_PROPERTY(bool stretchVideo READ stretchVideo WRITE stretchVideo NOTIFY dummySignal)
 	Q_PROPERTY(bool hdmi1080 READ hdmi1080 WRITE hdmi1080 NOTIFY dummySignal)
 	Q_PROPERTY(int hdmiResolution READ hdmiResolution WRITE hdmiResolution NOTIFY dummySignal)
-	Q_PROPERTY(bool showFPS READ showFPS WRITE showFPS NOTIFY dummySignal)
-	Q_PROPERTY(bool rotateQ10 READ rotateQ10 NOTIFY rotationChanged)
+	Q_PROPERTY(int rotateQ10 READ rotateQ10 NOTIFY rotationChanged)
 	Q_PROPERTY(int numMenuItems READ numMenuItems NOTIFY numMenuItemsChanged)
 	Q_PROPERTY(bool noTouchScreenControllers READ noTouchScreenControllers NOTIFY touchScreenControllerCountChanged)
-
-    Q_PROPERTY(int themeIndex READ themeIndex WRITE themeIndex NOTIFY dummySignal)
-    Q_PROPERTY(int primaryColourIndex READ primaryColourIndex WRITE primaryColourIndex NOTIFY dummySignal)
-    Q_PROPERTY(int primaryColourRed READ primaryColourRed WRITE primaryColourRed NOTIFY dummySignal)
-    Q_PROPERTY(int primaryColourGreen READ primaryColourGreen WRITE primaryColourGreen NOTIFY dummySignal)
-    Q_PROPERTY(int primaryColourBlue READ primaryColourBlue WRITE primaryColourBlue NOTIFY dummySignal)
-    Q_PROPERTY(int baseColourIndex READ baseColourIndex WRITE baseColourIndex NOTIFY dummySignal)
-    Q_PROPERTY(int baseColourRed READ baseColourRed WRITE baseColourRed NOTIFY dummySignal)
-    Q_PROPERTY(int baseColourGreen READ baseColourGreen WRITE baseColourGreen NOTIFY dummySignal)
-    Q_PROPERTY(int baseColourBlue READ baseColourBlue WRITE baseColourBlue NOTIFY dummySignal)
+	Q_PROPERTY(int SaveStateSlot READ SaveStateSlot WRITE SaveStateSlot NOTIFY SaveStateSlotChanged)
+	Q_PROPERTY(bool UseForeignWindowControl READ UseForeignWindowControl CONSTANT)
 
 private:
     enum ThemeColor
@@ -105,32 +97,10 @@ public:
     ~Frontend();
 
     /* Invokable functions that we can call from QML*/
-
-    /**
-     * This Invokable function gets a value from the QSettings,
-     * if that value does not exist in the QSettings database, the default value is returned.
-     *
-     * @param objectName Index path to the item
-     * @param defaultValue Used to create the data in the database when adding
-     * @return If the objectName exists, the value of the QSettings object is returned.
-     *         If the objectName doesn't exist, the default value is returned.
-     */
     Q_INVOKABLE
-    QString getValueFor(const QString &objectName, const QString &defaultValue);
-
-    /**
-     * This function sets a value in the QSettings database. This function should to be called
-     * when a data value has been updated from QML
-     *
-     * @param objectName Index path to the item
-     * @param inputValue new value to the QSettings database
-     */
+    void invokeLoadHistoryROM(const QString& rom) { m_historyROM = QString(rom); QTimer::singleShot(0, this, SLOT(onLoadHistoryROM())); }
     Q_INVOKABLE
-    void saveValueFor(const QString &objectName, const QString &inputValue);
-    Q_INVOKABLE
-    void saveConfigValue(const QString &section, const QString &name, const QString &value);
-    Q_INVOKABLE
-    QString getConfigValue(const QString &rom, const QString &section, const QString &name, const QString &value);
+    void invokePlayHistoryROM(const QString& rom) { m_historyROM = QString(rom); QTimer::singleShot(0, this, SLOT(onPlayHistoryROM())); }
     Q_INVOKABLE
     void startEmulator(bool start);
     Q_INVOKABLE
@@ -138,25 +108,11 @@ public:
     Q_INVOKABLE
     void LoadRom();
     Q_INVOKABLE
-    int getInputValue(int player, QString value);
-    Q_INVOKABLE
-    void setInputValue(int player, QString button, int value);
-    Q_INVOKABLE
     QString getMogaInputCharacter(int value);
     Q_INVOKABLE
     QString getInputCharacter(int value);
     Q_INVOKABLE
-    void setControllerID(int player, QString value);
-    Q_INVOKABLE
-    QString getControllerID(int player);
-    Q_INVOKABLE
-    int getControllerIndex(int player);
-    Q_INVOKABLE
-    void setControllerIndex(int player, int index);
-    Q_INVOKABLE
-    void setMogaInputValue(int player, QString button, int index);
-    Q_INVOKABLE
-    int getMogaInputValue(int player, QString button);
+    int getControllerIndex(const QString &id);
     Q_INVOKABLE
     void SaveState();
     Q_INVOKABLE
@@ -170,39 +126,29 @@ public:
     Q_INVOKABLE
 	void loadBoxArt(const QString &url);
     Q_INVOKABLE
-    void setBright(int index);
-    Q_INVOKABLE
 	void removeFromHistory(QString uuid);
     Q_INVOKABLE
 	void clearHistory();
     Q_INVOKABLE
     void swipedown();
     Q_INVOKABLE
-    void invokeLoadHistoryROM(const QString& rom) { m_historyROM = QString(rom); QTimer::singleShot(0, this, SLOT(onLoadHistoryROM())); }
-    Q_INVOKABLE
-    void invokePlayHistoryROM(const QString& rom) { m_historyROM = QString(rom); QTimer::singleShot(0, this, SLOT(onPlayHistoryROM())); }
-    Q_INVOKABLE
-    bool createShortcut(const QString& name, const QString& icon, const QString& location);
-    Q_INVOKABLE
-    void loadLastROM();
+    bool createShortcut(const QString& name, const QString& icon, const QString& location, bool run);
     Q_INVOKABLE
     bool isValidFilename(const QString &filename);
     Q_INVOKABLE
     inline void addMupenMenuItem() { m_numMenuItems.ref(); emit numMenuItemsChanged(); }
     Q_INVOKABLE
     inline void removeMupenMenuItem() { m_numMenuItems.deref(); emit numMenuItemsChanged(); }
+    Q_INVOKABLE
+    void pressGameshark();
+    Q_INVOKABLE
+    void selectState(bool save);
 
     QString getRom();
-    int getVideo();
-    int getAudio();
     void setRom(QString i);
-    void setVideo(int i);
-    void setAudio(int i);
 
 signals:
 	void romChanged(QString);
-	void videoChanged(int);
-	void audioChanged(int);
 	void boxArtChanged(ImageLoader*);
 	void boxartLoadedChanged(bool);
 	void dummySignal();
@@ -211,7 +157,7 @@ signals:
 	void invoked(QString url, bool runnow);
 	void menuOffsetChanged();
 	void coverImageChanged();
-	void createOption(QString name, QUrl imageSource);
+	void createOption(QString name, QString value, QUrl imageSource);
 	void controllersDetected();
 	void loadHistoryROM(QString rom);
 	void playHistoryROM(QString rom);
@@ -219,6 +165,9 @@ signals:
 	void rotationChanged();
 	void numMenuItemsChanged();
 	void touchScreenControllerCountChanged();
+	void SaveStateSlotChanged();
+	void ROMLoaded();
+	void FocusForeignWindow();
 
 public slots:
 	void addCheatToggle(int);
@@ -230,15 +179,22 @@ public slots:
 	void onInvoke(const bb::system::InvokeRequest& req);
 	void showMenuFinished();
 	void onMenuOffsetChanged();
-	void onCreateOption(QString name, QUrl imageSource);
+	void onCreateOption(QString name, QString value, QUrl imageSource);
 	void onLoadHistoryROM() { emit loadHistoryROM(m_historyROM); }
 	void onPlayHistoryROM() { emit playHistoryROM(m_historyROM); }
 	void startEmulatorInternal();
+	void releaseGameshark();
+	void pressFastforward();
+	void releaseFastforward();
+	void saveStateSlotSelected(bb::system::SystemUiResult::Type result);
+	void saveStateFileSelected(const QStringList &files);
 	//void emitSendCheat();
 	//void handleSendCheat();
 
 public:
     inline bool hasKeyboard() const { deviceinfo_details_t* details; deviceinfo_get_details(&details); bool retval = deviceinfo_details_get_keyboard(details) == DEVICEINFO_KEYBOARD_PRESENT; deviceinfo_free_details(&details); return retval; }
+    inline QString compileDate() const { return QString(__DATE__).simplified(); }
+    inline void focus() { emit FocusForeignWindow(); }
 
 private:
     inline int width() const { bb::device::DisplayInfo info; return info.pixelSize().width(); }
@@ -266,13 +222,10 @@ private:
     inline void hdmi1080(bool use) { m_settings->setValue("HDMI_1080", use); }
     inline int hdmiResolution() const { return m_settings->value("HDMI_RESOLUTION", 4).toInt(); }
     inline void hdmiResolution(int val) { m_settings->setValue("HDMI_RESOLUTION", val); }
-    inline bool showFPS() const { return m_settings->value("SHOW_FPS", false).toBool(); }
-    inline void showFPS(bool show) { m_settings->setValue("SHOW_FPS", show); }
-    inline bool stretchVideo() const { return m_settings->value("STRETCH_VIDEO", true).toBool(); }
-    inline void stretchVideo(bool stretch) { m_settings->setValue("STRETCH_VIDEO", stretch); }
-    inline bool rotateQ10() const { return q10_rotate; }
+    inline int rotateQ10() const { return q10_rotate; }
     inline int numMenuItems() const { return m_numMenuItems; }
     inline bool noTouchScreenControllers() const { return m_noTouchScreenControllers; }
+    inline bool UseForeignWindowControl() const { return !use_gamepad; }
 #ifdef BB103
     inline bool isOSThree() const { return true; }
     inline bool isOSThreeCompiled() const { return true; }
@@ -282,6 +235,9 @@ private:
     inline bool isOSThreeCompiled() const { return false; }
     inline bb::cascades::ActionBarPlacement::Type playPlacement() const { if (m_isOsThree) return (bb::cascades::ActionBarPlacement::Type)3; return bb::cascades::ActionBarPlacement::OnBar; }
 #endif
+
+    int SaveStateSlot();
+    void SaveStateSlot(int slot);
     void run();
     Container *createCheatToggle(sCheatInfo *pCur);
     Container *createCheatDropDown(sCheatInfo *pCur);
@@ -295,45 +251,22 @@ private:
 	void addToHistory(QString title);
 	bool debugMode();
 
-protected:
-    inline int themeIndex() const { return m_settings->value("THEME", 0).toInt(); }
-    inline int primaryColourIndex() const { return m_settings->value("PRIMARY_COLOUR_INDEX", 1).toInt(); }
-    inline int primaryColourRed() const { return m_settings->value("PRIMARY_COLOUR_R", 255).toInt(); }
-    inline int primaryColourGreen() const { return m_settings->value("PRIMARY_COLOUR_G", 0).toInt(); }
-    inline int primaryColourBlue() const { return m_settings->value("PRIMARY_COLOUR_B", 0).toInt(); }
-    inline int baseColourIndex() const { return m_settings->value("BASE_COLOUR_INDEX", 0).toInt(); }
-    inline int baseColourRed() const { return m_settings->value("BASE_COLOUR_R", 0).toInt(); }
-    inline int baseColourGreen() const { return m_settings->value("BASE_COLOUR_G", 0).toInt(); }
-    inline int baseColourBlue() const { return m_settings->value("BASE_COLOUR_B", 255).toInt(); }
-
-    inline void themeIndex(int index) { m_settings->setValue("THEME", index); refreshTheme(); }
-    inline void primaryColourIndex(int index) { m_settings->setValue("PRIMARY_COLOUR_INDEX", index); if (index == 1) refreshColours(); }
-    inline void primaryColourRed(int value) { m_settings->setValue("PRIMARY_COLOUR_R", value); refreshColours(); }
-    inline void primaryColourGreen(int value) { m_settings->setValue("PRIMARY_COLOUR_G", value); refreshColours(); }
-    inline void primaryColourBlue(int value) { m_settings->setValue("PRIMARY_COLOUR_B", value); refreshColours(); }
-    inline void baseColourIndex(int index) { m_settings->setValue("BASE_COLOUR_INDEX", index); if (index == 1) refreshColours(); }
-    inline void baseColourRed(int value) { m_settings->setValue("BASE_COLOUR_R", value); refreshColours(); }
-    inline void baseColourGreen(int value) { m_settings->setValue("BASE_COLOUR_G", value); refreshColours(); }
-    inline void baseColourBlue(int value) { m_settings->setValue("BASE_COLOUR_B", value); refreshColours(); }
-
 private:
     void refreshColours();
     void refreshTheme();
 
 private:
     bool m_emuRunning;
-    int mVideoPlugin;
     QString mRom;
     QMutex *m_animationLock;
-    int mAudio;
     Container *mCheatsContainer;
     ImageLoader* m_boxart;
     bb::cascades::TabbedPane *m_tab;
 	bool m_boxartLoaded;
     int m_menuOffset;
-    QString m_historyROM;
     QString m_coverImage;
     QString m_currentROM;
+    QString m_historyROM;
     int VERSION_MAJOR;
     int VERSION_MINOR;
     int VERSION_RELEASE;
@@ -345,6 +278,8 @@ private:
     bool m_useHdmi;
     QAtomicInt m_numMenuItems;
     bool m_noTouchScreenControllers;
+    M64PSettings* m_gameSettings;
+    bool m_selectStateSaving;
 };
 
 #endif // ifndef STARSHIPSETTINGSAPP_H

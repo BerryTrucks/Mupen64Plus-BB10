@@ -3,6 +3,7 @@
 
 #include <string>
 #include <bb/cascades/Application>
+#include <QObject>
 
 /*#ifdef __cplusplus
 extern "C" {
@@ -36,8 +37,13 @@ typedef struct {
 
 extern const char *button_names[];
 
-class Emulator
+class Emulator : public QObject
 {
+    Q_OBJECT
+
+signals:
+    void focusScreen();
+
 public:
 	Emulator(char * groupId, char * windowId);
 	~Emulator();
@@ -49,11 +55,15 @@ public:
 	char l_RomName[256];
 	Controller controller[4];
 	void save_controller_config(int iCtrlIdx);
-	void SaveState();
-	void LoadState();
+	void SaveState(const char* filename = 0);
+	void LoadState(const char* filename = 0);
+	void SendKeyDown(int key, int mod);
+    void SendKeyUp(int key, int mod);
 	void LoadTouchOverlay();
 	void ExitEmulator();
 	int print_controller_config();
+	int getSaveStateSlot();
+	void setSaveStateSlot(int slot);
 
 private:
 	int load_controller_config(const char *SectionName, int i);

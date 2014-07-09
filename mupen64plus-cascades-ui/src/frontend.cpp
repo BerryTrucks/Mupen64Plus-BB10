@@ -28,25 +28,30 @@
 #include <bb/cascades/FontStyle>
 #include <bb/cascades/TextStyle>
 #include <bb/cascades/StackLayout>
+#include <bb/cascades/DockLayout>
 #include <bb/cascades/SystemDefaults>
 #include <bb/cascades/ThemeSupport>
 #include <bb/cascades/Theme>
 #include <bb/cascades/ColorTheme>
 #include <bb/cascades/VisualStyle>
 #include <bb/cascades/Option>
-#include <QSettings>
 #include <bb/cascades/Window>
+
 #include <bb/cascades/pickers/FilePicker>
 #include <bb/cascades/pickers/FilePickerMode>
 #include <bb/cascades/pickers/FilePickerSortFlag>
 #include <bb/cascades/pickers/FilePickerSortOrder>
 #include <bb/cascades/pickers/FileType>
+
+#include <QSettings>
 #include <QSignalMapper>
+
 #include <bb/data/XmlDataAccess>
 #include <bb/platform/HomeScreen>
 #include <bb/platform/PlatformInfo>
 
 #include <bb/system/SystemToast>
+#include <bb/system/SystemListDialog>
 #include <bps/bps.h>
 #include <bps/screen.h>
 #include <bps/event.h>
@@ -59,6 +64,7 @@
 
 #include <sys/neutrino.h>
 
+using namespace bb::cascades::pickers;
 using namespace bb::cascades;
 using namespace bb::platform;
 using namespace bb::device;
@@ -78,10 +84,12 @@ QString CheatList = "";
 int chid = -1, coid = -1;
 
 extern bool debug_mode;
+extern bool first_on_new_settings;
 
 #define COLORIZE(color) ((float)(((double)(color)) / 255.0))
 
-enum GamePadButton{
+enum GamePadButton
+{
    A_BUTTON=0,
    B_BUTTON,
    C_BUTTON,
@@ -107,7 +115,8 @@ enum GamePadButton{
    EXT_BUTTON_R4
  };
 
-struct GameController {
+struct GameController
+{
   // Static device info.
   screen_device_t handle;
   int type;
@@ -235,7 +244,8 @@ QDataStream& operator>>(QDataStream& in, Game &obj)
 
 Frontend::Frontend()
 {
-    if (m_settings->value("THEME", -1).toInt() < 0)
+    m_gameSettings = new M64PSettings();
+    if (m_gameSettings->Settings()->Theme() < 0)
     {
         ThemeSupport* themeSupport = Application::instance()->themeSupport();
         Theme* currentTheme = themeSupport->theme();
@@ -244,10 +254,10 @@ Frontend::Frontend()
         switch (style)
         {
         case VisualStyle::Bright:
-            m_settings->setValue("THEME", 0);
+            m_gameSettings->Settings()->Theme(0);
             break;
         case VisualStyle::Dark:
-            m_settings->setValue("THEME", 1);
+            m_gameSettings->Settings()->Theme(1);
             break;
         }
     }
@@ -256,6 +266,11 @@ Frontend::Frontend()
 	qmlRegisterType<ImageLoader>();
 	qRegisterMetaType<Game>("Game");
 	qRegisterMetaTypeStreamOperators<Game>("Game");
+
+    // Set the application organization and name, which is used by QSettings
+    // when saving values to the persistent store.
+    QCoreApplication::setOrganizationName("Example");
+    QCoreApplication::setApplicationName("Mupen64Plus-BB");
 
 	bb::PackageInfo pacInfo;
 	QStringList version = pacInfo.version().split('.');
@@ -297,9 +312,7 @@ NOT_OK:
 	m_useHdmi = false;
 	m_emuRunning = false;
 	m_boxart = 0;
-	mVideoPlugin = 0;
 	m_boxartLoaded = false;
-	mAudio = 0;
 	m_menuOffset = 0;
 	m_devices = new QMapListDataModel();
 	m_history = new QMapListDataModel();
@@ -309,8 +322,10 @@ NOT_OK:
 	m_coverImage = "asset:///images/mupen64plus.png";
 	m_numMenuItems = 0;
 	m_noTouchScreenControllers = true;
+	m_selectStateSaving = false;
 
-	if(access("shared/misc/n64/", F_OK) != 0){
+	if(access("shared/misc/n64/", F_OK) != 0)
+	{
 		mkdir("shared/misc/n64/", S_IRWXU | S_IRWXG);
 		mkdir("shared/misc/n64/data", S_IRWXU | S_IRWXG);
 		mkdir("shared/misc/n64/roms", S_IRWXU | S_IRWXG);
@@ -325,7 +340,8 @@ NOT_OK:
 		// clean and more secure
 		// feof(FILE* stream) returns non-zero if the end of file indicator for stream is set
 
-		while ((size = fread(buf, 1, 8192, source))) {
+		while ((size = fread(buf, 1, 8192, source)))
+		{
 			fwrite(buf, 1, size, dest);
 		}
 
@@ -334,11 +350,113 @@ NOT_OK:
 	}
 
 	m64p = new Emulator((char *)Application::instance()->mainWindow()->groupId().toAscii().constData(), (char*)QString("emulator_m64p").toAscii().constData());
+	connect(m64p, SIGNAL(focusScreen()), SIGNAL(FocusForeignWindow()));
 	//m64p->print_controller_config();
+
+	if (first_on_new_settings)
+	{
+	    QSettings settings;
+	    QVariant val = settings.value("gles2n64");
+	    if (!val.isNull())
+	    {
+	        if (QString::compare(val.toString(), "true", Qt::CaseInsensitive) == 0)
+	            m_gameSettings->VideoPlugin(1);
+	    }
+	    for (int i = 0; i < 4; i++)
+	    {
+	        if (m64p->controller[i].present)
+	        {
+	            if (m64p->controller[i].device == -2)
+	            {
+	                m_gameSettings->PlayerKeyboardSettings(i + 1)->DPadR(m64p->controller[i].button[0]);
+                    m_gameSettings->PlayerKeyboardSettings(i + 1)->DPadL(m64p->controller[i].button[1]);
+                    m_gameSettings->PlayerKeyboardSettings(i + 1)->DPadU(m64p->controller[i].button[2]);
+                    m_gameSettings->PlayerKeyboardSettings(i + 1)->DPadD(m64p->controller[i].button[3]);
+                    m_gameSettings->PlayerKeyboardSettings(i + 1)->Start(m64p->controller[i].button[4]);
+                    m_gameSettings->PlayerKeyboardSettings(i + 1)->ZTrigger(m64p->controller[i].button[5]);
+                    m_gameSettings->PlayerKeyboardSettings(i + 1)->BButton(m64p->controller[i].button[6]);
+                    m_gameSettings->PlayerKeyboardSettings(i + 1)->AButton(m64p->controller[i].button[7]);
+                    m_gameSettings->PlayerKeyboardSettings(i + 1)->CButtonR(m64p->controller[i].button[8]);
+                    m_gameSettings->PlayerKeyboardSettings(i + 1)->CButtonL(m64p->controller[i].button[9]);
+                    m_gameSettings->PlayerKeyboardSettings(i + 1)->CButtonD(m64p->controller[i].button[10]);
+                    m_gameSettings->PlayerKeyboardSettings(i + 1)->CButtonU(m64p->controller[i].button[11]);
+                    m_gameSettings->PlayerKeyboardSettings(i + 1)->RTrigger(m64p->controller[i].button[12]);
+                    m_gameSettings->PlayerKeyboardSettings(i + 1)->LTrigger(m64p->controller[i].button[13]);
+                    m_gameSettings->PlayerKeyboardSettings(i + 1)->XAxisLeft(m64p->controller[i].axis[0].a);
+                    m_gameSettings->PlayerKeyboardSettings(i + 1)->XAxisRight(m64p->controller[i].axis[0].b);
+                    m_gameSettings->PlayerKeyboardSettings(i + 1)->YAxisUp(m64p->controller[i].axis[1].a);
+                    m_gameSettings->PlayerKeyboardSettings(i + 1)->YAxisDown(m64p->controller[i].axis[1].b);
+                    m_gameSettings->PlayerKeyboardSettings(i + 1)->UpLeft(m64p->controller[i].diagonals[0]);
+                    m_gameSettings->PlayerKeyboardSettings(i + 1)->UpRight(m64p->controller[i].diagonals[1]);
+                    m_gameSettings->PlayerKeyboardSettings(i + 1)->DownLeft(m64p->controller[i].diagonals[2]);
+                    m_gameSettings->PlayerKeyboardSettings(i + 1)->DownRight(m64p->controller[i].diagonals[3]);
+                    if (m64p->controller[i].plugin == 5)
+                        m_gameSettings->PlayerKeyboardSettings(i + 1)->RumblePak(true);
+	            }
+	            else if (m64p->controller[i].device == -3)
+	            {
+	                m_gameSettings->PlayerTouchscreenSettings(i + 1)->ControllerLayout(m64p->controller[i].layout);
+                    if (m64p->controller[i].plugin == 5)
+                        m_gameSettings->PlayerTouchscreenSettings(i + 1)->RumblePak(true);
+	            }
+	            else if (m64p->controller[i].device == -4)
+	            {
+                    m_gameSettings->PlayerGamepadSettings(i + 1)->DPadR(m64p->controller[i].button[0]);
+                    m_gameSettings->PlayerGamepadSettings(i + 1)->DPadL(m64p->controller[i].button[1]);
+                    m_gameSettings->PlayerGamepadSettings(i + 1)->DPadU(m64p->controller[i].button[2]);
+                    m_gameSettings->PlayerGamepadSettings(i + 1)->DPadD(m64p->controller[i].button[3]);
+                    m_gameSettings->PlayerGamepadSettings(i + 1)->Start(m64p->controller[i].button[4]);
+                    m_gameSettings->PlayerGamepadSettings(i + 1)->ZTrigger(m64p->controller[i].button[5]);
+                    m_gameSettings->PlayerGamepadSettings(i + 1)->BButton(m64p->controller[i].button[6]);
+                    m_gameSettings->PlayerGamepadSettings(i + 1)->AButton(m64p->controller[i].button[7]);
+                    m_gameSettings->PlayerGamepadSettings(i + 1)->CButtonR(m64p->controller[i].button[8]);
+                    m_gameSettings->PlayerGamepadSettings(i + 1)->CButtonL(m64p->controller[i].button[9]);
+                    m_gameSettings->PlayerGamepadSettings(i + 1)->CButtonD(m64p->controller[i].button[10]);
+                    m_gameSettings->PlayerGamepadSettings(i + 1)->CButtonU(m64p->controller[i].button[11]);
+                    m_gameSettings->PlayerGamepadSettings(i + 1)->RTrigger(m64p->controller[i].button[12]);
+                    m_gameSettings->PlayerGamepadSettings(i + 1)->LTrigger(m64p->controller[i].button[13]);
+                    if (m64p->controller[i].axis[0].a == -2)
+                    {
+                        m_gameSettings->PlayerGamepadSettings(i + 1)->AnalogStickType(1);
+                    }
+                    else if (m64p->controller[i].axis[0].a == -3)
+                    {
+                        m_gameSettings->PlayerGamepadSettings(i + 1)->AnalogStickType(2);
+                    }
+                    else
+                    {
+                        m_gameSettings->PlayerGamepadSettings(i + 1)->AnalogStickType(0);
+                        m_gameSettings->PlayerGamepadSettings(i + 1)->XAxisLeft(m64p->controller[i].axis[0].a);
+                        m_gameSettings->PlayerGamepadSettings(i + 1)->XAxisRight(m64p->controller[i].axis[0].b);
+                        m_gameSettings->PlayerGamepadSettings(i + 1)->YAxisUp(m64p->controller[i].axis[1].a);
+                        m_gameSettings->PlayerGamepadSettings(i + 1)->YAxisDown(m64p->controller[i].axis[1].b);
+                    }
+	            }
+	            else if (m64p->controller[i].device == -5)
+	            {
+                    m_gameSettings->PlayerTouchKeyboardSettings(i + 1)->DPadR(m64p->controller[i].button[0]);
+                    m_gameSettings->PlayerTouchKeyboardSettings(i + 1)->DPadL(m64p->controller[i].button[1]);
+                    m_gameSettings->PlayerTouchKeyboardSettings(i + 1)->DPadU(m64p->controller[i].button[2]);
+                    m_gameSettings->PlayerTouchKeyboardSettings(i + 1)->DPadD(m64p->controller[i].button[3]);
+                    m_gameSettings->PlayerTouchKeyboardSettings(i + 1)->ZTrigger(m64p->controller[i].button[5]);
+                    m_gameSettings->PlayerTouchKeyboardSettings(i + 1)->BButton(m64p->controller[i].button[6]);
+                    m_gameSettings->PlayerTouchKeyboardSettings(i + 1)->AButton(m64p->controller[i].button[7]);
+                    m_gameSettings->PlayerTouchKeyboardSettings(i + 1)->CButtonR(m64p->controller[i].button[8]);
+                    m_gameSettings->PlayerTouchKeyboardSettings(i + 1)->CButtonL(m64p->controller[i].button[9]);
+                    m_gameSettings->PlayerTouchKeyboardSettings(i + 1)->CButtonD(m64p->controller[i].button[10]);
+                    m_gameSettings->PlayerTouchKeyboardSettings(i + 1)->CButtonU(m64p->controller[i].button[11]);
+                    m_gameSettings->PlayerTouchKeyboardSettings(i + 1)->RTrigger(m64p->controller[i].button[12]);
+                    m_gameSettings->PlayerTouchKeyboardSettings(i + 1)->LTrigger(m64p->controller[i].button[13]);
+                    if (m64p->controller[i].plugin == 5)
+                        m_gameSettings->PlayerTouchKeyboardSettings(i + 1)->RumblePak(true);
+	            }
+	        }
+	    }
+	}
 
 	connect(m_menuAnimation, SIGNAL(finished()), SLOT(showMenuFinished()));
 	connect(this, SIGNAL(menuOffsetChanged()), SLOT(onMenuOffsetChanged()));
-	connect(this, SIGNAL(createOption(QString,QUrl)), SLOT(onCreateOption(QString,QUrl)));
+	connect(this, SIGNAL(createOption(QString, QString, QUrl)), SLOT(onCreateOption(QString, QString, QUrl)));
 
 	toast = new SystemToast(this);
 	toastButton = new SystemToast(this);
@@ -346,18 +464,17 @@ NOT_OK:
 	chid = ChannelCreate(0);
 	coid = ConnectAttach(0, 0, chid, _NTO_SIDE_CHANNEL, 0);
 
-    // Set the application organization and name, which is used by QSettings
-    // when saving values to the persistent store.
-    QCoreApplication::setOrganizationName("Example");
-    QCoreApplication::setApplicationName("Mupen64Plus-BB");
-
     // Then we load the application.
     QmlDocument *qml = QmlDocument::create("asset:///main.qml");
     qml->setContextProperty("_frontend", this);
+    qml->setContextProperty("_settings", m_gameSettings);
 
-    if (!qml->hasErrors()) {
+    if (!qml->hasErrors())
+    {
+        printf("qml has no errors\n"); fflush(stdout);
         m_tab = qml->createRootObject<TabbedPane>();
-        if (m_tab) {
+        if (m_tab)
+        {
         	mCheatsContainer = m_tab->findChild<Container*>("cheats");
 
             Application::instance()->setScene(m_tab);
@@ -369,38 +486,40 @@ NOT_OK:
             start();
         }
     }
+    else
+    {
+        printf("qml has errors\n"); fflush(stdout);
+    }
 }
 
 Frontend::~Frontend()
 {
-	printf("Saving Controllers!\n");fflush(stdout);
+    if (debug_mode) { printf("Saving Controllers!\n");fflush(stdout); }
 	m64p->save_controller_config(0);
 	m64p->save_controller_config(1);
 	m64p->save_controller_config(2);
 	m64p->save_controller_config(3);
-	printf("Finished Saving Controllers!\n");fflush(stdout);
+	if (debug_mode) { printf("Finished Saving Controllers!\n");fflush(stdout); }
 	delete m_settings;
 	delete m_devices;
 	delete m_history;
 	delete m_menuAnimation;
 	delete m_animationLock;
+	delete m_gameSettings;
 	if (m_hdmiInfo)
 		delete m_hdmiInfo;
-}
-
-void Frontend::setBright(int index)
-{
-    m_settings->setValue("THEME", index);
 }
 
 void Frontend::refreshColours()
 {
 #ifdef BB103
-    Color primary = Color::fromRGBA(COLORIZE(primaryColourRed()), COLORIZE(primaryColourGreen()), COLORIZE(primaryColourBlue()));
-    Color base = Color::fromRGBA(COLORIZE(baseColourRed()), COLORIZE(baseColourGreen()), COLORIZE(baseColourBlue()));
-    if (primaryColourIndex() == 0)
+    Color primary = Color::fromRGBA(COLORIZE(m_gameSettings->Settings()->PrimaryColourRed()),
+            COLORIZE(m_gameSettings->Settings()->PrimaryColourGreen()), COLORIZE(m_gameSettings->Settings()->PrimaryColourBlue()));
+    Color base = Color::fromRGBA(COLORIZE(m_gameSettings->Settings()->BaseColourRed()),
+            COLORIZE(m_gameSettings->Settings()->BaseColourGreen()), COLORIZE(m_gameSettings->Settings()->BaseColourBlue()));
+    if (m_gameSettings->Settings()->PrimaryColourIndex() == 0)
         Application::instance()->themeSupport()->setPrimaryColor(bb::cascades::Color());
-    else if (baseColourIndex() == 0)
+    else if (m_gameSettings->Settings()->BaseColourIndex() == 0)
         Application::instance()->themeSupport()->setPrimaryColor(primary);
     else
         Application::instance()->themeSupport()->setPrimaryColor(primary, base);
@@ -422,7 +541,8 @@ bool Frontend::debugMode()
 	return debug_mode;
 }
 
-void Frontend::onManualExit(){
+void Frontend::onManualExit()
+{
 	QDir dir("data/screens/");
 	dir.setNameFilters(QStringList() << "*.*");
 	dir.setFilter(QDir::Files);
@@ -430,18 +550,20 @@ void Frontend::onManualExit(){
 	{
 		dir.remove(dirFile);
 	}
-	printf("OnManualExit!\n");fflush(stdout);
+	if (debug_mode) { printf("OnManualExit!\n");fflush(stdout); }
 	int msg = 2;//, ret = 0;
 	MsgSend(coid, &msg, sizeof(msg), NULL, 0);
 	wait();
-	printf("Wait!\n");fflush(stdout);
+	if (debug_mode) { printf("Wait!\n");fflush(stdout); }
 	quit();
-	printf("Quit!\n");fflush(stdout);
+	if (debug_mode) { printf("Quit!\n");fflush(stdout); }
 }
-typedef union {
+
+typedef union
+{
 	_pulse pulse;
 	int msg;
-}recv_msg;
+} recv_msg;
 
 //A separate QThread that runs the emulator.
 void Frontend::run()
@@ -461,93 +583,100 @@ void Frontend::run()
 	detectHDMI();
 	setHistory(getHistory());
 
-	while(1) {
-		while(1){
+	while(1)
+	{
+		while(1)
+		{
 			rcvid = MsgReceive(chid, &msg, sizeof(msg), 0);
 
-			if(rcvid <= 0){
+			if(rcvid <= 0)
 				continue;
-			}
 
-			if(msg.msg == 1){
+			if(msg.msg == 1)
+			{
 				MsgReply(rcvid, 0, NULL, 0);
 				break;
-			} else if (msg.msg == 2){
+			}
+			else if (msg.msg == 2)
+			{
 				MsgReply(rcvid, 0, NULL, 0);
 				return;
 			}
 
 			z = 5;
-			if (screen_set_window_property_iv(screen_win_map, SCREEN_PROPERTY_ZORDER, &z) != 0) {
+			if (screen_set_window_property_iv(screen_win_map, SCREEN_PROPERTY_ZORDER, &z) != 0)
 				return;
-			}
 
 			screen_post_window(screen_win_map, screen_buf[0], 1, rect, 0);
 
-			while(1){
-				if (BPS_SUCCESS != bps_get_event(&event, -1)) {
-					fprintf(stderr, "bps_get_event failed\n");
+			while(1)
+			{
+				if (BPS_SUCCESS != bps_get_event(&event, -1))
+				{
+					if (debug_mode)
+					    fprintf(stderr, "bps_get_event failed\n");
 					break;
 				}
 
-				if (event) {
+				if (event)
+				{
 					int domain = bps_event_get_domain(event);
 
-					if (domain == screen_get_domain()) {
+					if (domain == screen_get_domain())
+					{
 						screen_event_t screen_event = screen_event_get_event(event);
 						int screen_val;
 						screen_get_event_property_iv(screen_event, SCREEN_PROPERTY_TYPE, &screen_val);
 
-						if(screen_val == SCREEN_EVENT_MTOUCH_TOUCH){
+						if(screen_val == SCREEN_EVENT_MTOUCH_TOUCH)
+						{
 							//This is touch screen event
 							sym = -1;
 							break;
-						} else if(screen_val == SCREEN_EVENT_KEYBOARD) {
+						}
+						else if(screen_val == SCREEN_EVENT_KEYBOARD)
+						{
 							screen_get_event_property_iv(screen_event, SCREEN_PROPERTY_KEY_SYM, &sym);
 							break;
 						}
 						else if (screen_val == SCREEN_EVENT_GAMEPAD || screen_val == SCREEN_EVENT_JOYSTICK)
 						{
-							screen_device_t device;
-							screen_get_event_property_pv(screen_event, SCREEN_PROPERTY_DEVICE, (void**)&device);
-							for (int i = 0; i < 4; i++)
-							{
-								GameController *control = &_controllers[i];
-								if (control->handle == device)
-								{
-									sym = NO_BUTTON;
-									fprintf(stderr, "Testing Gamepad: %s\n", control->id);
-									int err = screen_get_event_property_iv(screen_event, SCREEN_PROPERTY_BUTTONS, &control->buttons);
-									if (err != BPS_SUCCESS)
-										fprintf(stderr, "Error at SCREEN_PROPERTY_BUTTONS: %d\n", err);
-									fprintf(stderr, "Testing Gamepad Button: %d\n", control->buttons);
-									if (control->buttons == 0)
-									{
-										screen_get_event_property_iv(screen_event, SCREEN_PROPERTY_ANALOG0, control->analog0);
-										if (control->analog0[2] == 255)
-										{
-											sym = 1 << EXT_BUTTON_L4;
-										}
-										screen_get_event_property_iv(screen_event, SCREEN_PROPERTY_ANALOG1, control->analog1);
-										if (control->analog1[2] == 255)
-										{
-											sym = 1 << EXT_BUTTON_R4;
-										}
-									}
-									else
-									{
-										for (int j = A_BUTTON; j < NO_BUTTON; j++)
-										{
-											if (control->buttons & (1 << j))
-											{
-												fprintf(stderr, "Gamepad Button: %d\n", j);
-												sym = 1 << j;
-												break;
-											}
-										}
-									}
-								}
-							}
+							int buttons;
+							int analog0[3];
+							int analog1[3];
+                            sym = NO_BUTTON;
+                            int err = screen_get_event_property_iv(screen_event, SCREEN_PROPERTY_BUTTONS, &buttons);
+                            if (err != BPS_SUCCESS && debug_mode)
+                                fprintf(stderr, "Error at SCREEN_PROPERTY_BUTTONS: %d\n", err);
+                            if (buttons == 0)
+                            {
+                                screen_get_event_property_iv(screen_event, SCREEN_PROPERTY_ANALOG0, analog0);
+                                if (analog0[2] == 255)
+                                {
+                                    sym = 1 << EXT_BUTTON_L4;
+                                }
+                                else
+                                {
+                                    screen_get_event_property_iv(screen_event, SCREEN_PROPERTY_ANALOG1, analog1);
+                                    if (analog1[2] == 255)
+                                    {
+                                        sym = 1 << EXT_BUTTON_R4;
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                for (int j = A_BUTTON; j < NO_BUTTON; j++)
+                                {
+                                    if (buttons & (1 << j))
+                                    {
+                                        if (debug_mode)
+                                            fprintf(stderr, "Gamepad Button: %d\n", j);
+                                        sym = 1 << j;
+                                        break;
+                                    }
+                                }
+                            }
 							if (sym == NO_BUTTON)
 								sym = -1;
 							break;
@@ -557,47 +686,31 @@ void Frontend::run()
 			}
 
 			z = -10;
-			if (screen_set_window_property_iv(screen_win_map, SCREEN_PROPERTY_ZORDER, &z) != 0) {
+			if (screen_set_window_property_iv(screen_win_map, SCREEN_PROPERTY_ZORDER, &z) != 0)
 				return;
-			}
 			screen_post_window(screen_win_map, screen_buf[0], 1, rect, 0);
 
 			MsgReply(rcvid, 0, &sym, sizeof(sym));
 		}
 
 		//Cheats
-		printf("CheatList: %s\n", CheatList.toAscii().constData());
+		if (debug_mode) printf("CheatList: %s\n", CheatList.toAscii().constData());
 		m64p->l_CheatNumList = strdup((char*)CheatList.toAscii().constData());
 
-		//Input
-		m64p->save_controller_config(0);
-		m64p->save_controller_config(1);
-		m64p->save_controller_config(2);
-		m64p->save_controller_config(3);
+        dbg_fps = false;
+        if (m_gameSettings->GlideSettings()->VideoPlugin() == 2 &&
+                m_gameSettings->GlideSettings()->DisplayStats() == 0 && m_gameSettings->Settings()->ShowFPS())
+            m64p->SetConfigParameter(std::string("Video-Glide64mk2[show_fps]=1"));
+        else if (m_gameSettings->GlideSettings()->VideoPlugin() != 2 && m_gameSettings->Settings()->ShowFPS())
+            dbg_fps = true;
 
-		if(mAudio){
-			m64p->SetConfigParameter(std::string("UI-Console[AudioPlugin]=")+"mupen64plus-audio-sdl");
-		} else {
-			m64p->SetConfigParameter(std::string("UI-Console[AudioPlugin]=")+"dummy");
-		}
-
-		if(!mVideoPlugin){
-			m64p->SetConfigParameter(std::string("UI-Console[VideoPlugin]=")+"libmupen64plus-video-rice");
-		}
-		else if (mVideoPlugin == 1) {
-			m64p->SetConfigParameter(std::string("UI-Console[VideoPlugin]=")+"gles2n64");
-		}
-		else {
-			m64p->SetConfigParameter(std::string("UI-Console[VideoPlugin]=")+"mupen64plus-video-glide64mk2");
-		}
-
-		bool stretch = stretchVideo();
+		bool stretch = m_gameSettings->RiceSettings()->StretchVideo();
         int w = emuWidth();
         int h = emuHeight();
         use_overlay = false;
         use_hdmi = false;
-        dbg_fps = showFPS();
-        q10_rotate = false;
+        q10_rotate = 0;
+        use_gamepad = true;
         if (m_hdmiInfo && m_hdmiInfo->isAttached())
         {
             if (m_useHdmi)
@@ -649,9 +762,10 @@ void Frontend::run()
         }
         for (int i = 0; i < 4; i++)
         {
-            if (m64p->controller[i].present)
+            int input = m_gameSettings->PlayerKeyboardSettings(i + 1)->Input();
+            if (input != 0)
             {
-                if (m64p->controller[i].device == -3)
+                if (input == -3)
                 {
                     m_noTouchScreenControllers = false;
                     if (emuWidth() != emuHeight())
@@ -662,7 +776,7 @@ void Frontend::run()
                             stretch = true;
                     }
                 }
-                else if (m64p->controller[i].device == -5)
+                else if (input == -5)
                 {
                     if (emuWidth() == emuHeight())
                     {
@@ -670,22 +784,30 @@ void Frontend::run()
                             use_overlay = true;
                         else
                             stretch = true;
-                        q10_rotate = true;
+                        q10_rotate = -((m_gameSettings->PlayerTouchKeyboardSettings(i + 1)->RotationDirection() << 1) - 1);
                     }
+                    use_gamepad = false;
+                }
+                else if (input == -2)
+                {
+                    if (hasKeyboard())
+                        use_gamepad = false;
                 }
             }
         }
         emit touchScreenControllerCountChanged();
 		//screen resolution
-		std::ostringstream s, s3;
+		std::ostringstream s, s3, s5;
 		s << "Video-General[ScreenWidth]=";
         s3 << "gles2n64[screen width]=";
-		if (!mVideoPlugin && !stretch)
+        s5 << "gles2n64[framebuffer width]=";
+		if (m_gameSettings->RiceSettings()->VideoPlugin() == 0 && !stretch)
         {
             if (w == h)
             {
                 s << w;
                 s3 << w;
+                s5 << w;
                 margin_left = 0;
             }
             else
@@ -693,8 +815,9 @@ void Frontend::run()
                 int wdth = ((double)h) * 1.3333333333333;
                 s << (int)wdth;
                 s3 << (int)wdth;
+                s5 << (int)wdth;
                 margin_left = (int)((((double)w) - wdth) / 2.0);
-                printf("margin_left = %d\n", margin_left);
+                if (debug_mode) printf("margin_left = %d\n", margin_left);
             }
         }
 		else
@@ -702,25 +825,30 @@ void Frontend::run()
             margin_left = 0;
             s << w;
             s3 << w;
+            s5 << w;
         }
 		m64p->SetConfigParameter(s.str());
         m64p->SetConfigParameter(s3.str());
-		std::ostringstream s2, s4;
+        m64p->SetConfigParameter(s5.str());
+		std::ostringstream s2, s4, s6;
 		s2 << "Video-General[ScreenHeight]=";
         s4 << "gles2n64[screen height]=";
-		if (!mVideoPlugin && !stretch)
+        s6 << "gles2n64[framebuffer height]=";
+		if (m_gameSettings->RiceSettings()->VideoPlugin() == 0 && !stretch)
 		{
             if (w == h)
             {
                 double hght = ((double)w) * 0.75;
                 s2 << (int)hght;
                 s4 << (int)hght;
+                s6 << (int)hght;
                 margin_bottom = (int)((((double)h) - hght) / 2.0);
             }
             else
             {
                 s2 << h;
                 s4 << h;
+                s6 << h;
                 margin_bottom = 0;
             }
 		}
@@ -729,9 +857,26 @@ void Frontend::run()
             margin_bottom = 0;
 		    s2 << h;
             s4 << h;
+            s6 << h;
 		}
 		m64p->SetConfigParameter(s2.str());
         m64p->SetConfigParameter(s4.str());
+        m64p->SetConfigParameter(s6.str());
+
+        m_gameSettings->GameAudioSettings()->writeSettings(m64p);
+        m_gameSettings->RiceSettings()->writeSettings(m64p);
+        m_gameSettings->N64Settings()->writeSettings(m64p);
+        m_gameSettings->GlideSettings()->writeSettings(m64p);
+        for (int i = 0; i < 4; i++)
+        {
+            m_gameSettings->PlayerKeyboardSettings(i + 1)->writeSettings(m64p);
+            m_gameSettings->PlayerTouchscreenSettings(i + 1)->writeSettings(m64p);
+            m_gameSettings->PlayerTouchKeyboardSettings(i + 1)->writeSettings(m64p);
+            m_gameSettings->PlayerGamepadSettings(i + 1)->writeSettings(m64p);
+            m64p->save_controller_config(i);
+        }
+        m64p->SetConfigParameter("CoreEvents[Kbd Mapping Gameshark]=103");
+        m64p->SetConfigParameter("CoreEvents[Kbd Mapping Fast Forward]=102");
 
         emit rotationChanged();
 
@@ -775,92 +920,33 @@ void Frontend::onThumbnail()
 
 void Frontend::showMenuFinished()
 {
+    if (menuOffset() < 10 && use_gamepad)
+        focus();
 	m_animationLock->unlock();
 }
 
 void Frontend::onMenuOffsetChanged()
 {
-	bbutil_offset_menu(m_menuOffset);
+    if (!use_gamepad)
+        bbutil_offset_menu(m_menuOffset);
 }
 
 void Frontend::swipedown()
 {
-	if (!m_animationLock->tryLock())
-		return;
-	if (bbutil_is_menu_open())
-	{
-		m_menuAnimation->setStartValue(175);
-		m_menuAnimation->setEndValue(0);
-		m_menuAnimation->start();
-	}
-	else
-	{
-		m_menuAnimation->setStartValue(0);
-		m_menuAnimation->setEndValue(175);
-		m_menuAnimation->start();
-	}
-}
-
-QString Frontend::getValueFor(const QString &objectName, const QString &defaultValue)
-{
-    QSettings settings;
-
-    // If no value has been saved, return the default value.
-    if (settings.value(objectName).isNull()) {
-        return defaultValue;
+    if (!m_animationLock->tryLock())
+        return;
+    if (menuOffset() > 0)
+    {
+        m_menuAnimation->setStartValue(175);
+        m_menuAnimation->setEndValue(0);
+        m_menuAnimation->start();
     }
-
-    // Otherwise, return the value stored in the settings object.
-    return settings.value(objectName).toString();
-}
-
-void Frontend::saveValueFor(const QString &objectName, const QString &inputValue)
-{
-    // A new value is saved to the application settings object.
-    QSettings settings;
-    /*SystemToast *toast = new SystemToast();
-    toast->setBody(objectName + "=" + inputValue);
-    toast->show();*/
-    settings.setValue(objectName, QVariant(inputValue));
-}
-
-//For input this will jsut update our controller struct. Else, we use QSettings for video.
-void Frontend::saveConfigValue(const QString &section, const QString &name, const QString &value)
-{
-    if(!section.contains("Input-SDL-Control")) {
-		if(this->getValueFor("perRom", "true") == "true"){
-		    if (mRom.isEmpty() || mRom.isNull()) {
-		        QString rom = QString(m_history->value(0)["location"].toString());
-		        this->saveValueFor(rom.mid(rom.lastIndexOf('/')+1) + name, value);
-		    }
-		    else
-                this->saveValueFor(mRom.mid(mRom.lastIndexOf('/')+1) + name, value);
-		} else {
-			this->saveValueFor(name, value);
-		}
-	}
-
-	if (!(QString::compare(section, "Video-Rice") == 0 && QString::compare(name, "stretchvideo") == 0))
-	    m64p->SetConfigParameter((std::string)(section.toStdString() + "[" + name.toStdString() + "]=" + value.toStdString()));
-}
-
-//For input this will jsut update our controller struct. Else, we use QSettings for video.
-QString Frontend::getConfigValue(const QString &rom, const QString &section, const QString &name, const QString &value)
-{
-	Q_UNUSED(rom);
-    if(!section.contains("Input-SDL-Control")) {
-		if(this->getValueFor("perRom", "true") == "true") {
-            if (mRom.isEmpty() || mRom.isNull()) {
-                QString roms = QString(m_history->value(0)["location"].toString());
-                return this->getValueFor(roms.mid(roms.lastIndexOf('/')+1) + name, value);
-            }
-            else
-                return this->getValueFor(mRom.mid(mRom.lastIndexOf('/')+1) + name, value);
-		} else {
-			return this->getValueFor(name, value);
-		}
-	}
-	return NULL;
+    else
+    {
+        m_menuAnimation->setStartValue(0);
+        m_menuAnimation->setEndValue(175);
+        m_menuAnimation->start();
+    }
 }
 
 QList<Game> Frontend::getHistory()
@@ -916,10 +1002,7 @@ void Frontend::addToHistory(QString title)
 		return;
 	QList<Game> history = getHistory();
 	Game gm(title);
-	QString tmp = getValueFor("boxart", "true");
-	bool boxart = false;
-	if (QString::compare(tmp, "true", Qt::CaseInsensitive) == 0)
-		boxart = true;
+	bool boxart = m_gameSettings->Settings()->BoxartScraping();
 	for (int i = 0; i < history.size(); i++)
 	{
 		if (QString::compare(history[i].name(), title, Qt::CaseInsensitive) == 0)
@@ -931,9 +1014,12 @@ void Frontend::addToHistory(QString title)
     QString selectedFile = mRom.mid(mRom.lastIndexOf('/') + 1);
     int tmp2 = selectedFile.indexOf("(");
     QString imageSource;
-    if(tmp2 == -1) {
+    if(tmp2 == -1)
+    {
         imageSource = "file:///accounts/1000/shared/misc/n64/.boxart/" + selectedFile.mid(0, selectedFile.lastIndexOf(".")).trimmed() + ".jpg";
-    } else {
+    }
+    else
+    {
         imageSource = "file:///accounts/1000/shared/misc/n64/.boxart/" + selectedFile.mid(0, tmp2).trimmed() + ".jpg";
     }
 	if (gm.resource().length() == 0)
@@ -1002,57 +1088,171 @@ void Frontend::setRom(QString i)
 {
     mRom = i;
     m64p->SetRom(mRom.toAscii().constData());
+    m_gameSettings->setGameName(mRom);
     emit romChanged(mRom);
 }
 
 void Frontend::LoadRom()
 {
 	m64p->LoadRom();
+	emit ROMLoaded();
 }
 
-void Frontend::loadLastROM()
+void Frontend::pressGameshark()
 {
-	mRom = QString(m_history->value(0)["location"].toString());
-	m64p->SetRom(mRom.toAscii().constData());
-	m64p->LoadRom();
+    m64p->SendKeyDown(103, 0);
+    QTimer::singleShot(250, this, SLOT(releaseGameshark()));
 }
 
-int Frontend::getVideo()
+void Frontend::releaseGameshark()
 {
-    return mVideoPlugin;
+    m64p->SendKeyUp(103, 0);
 }
 
-void Frontend::setVideo(int i)
+void Frontend::pressFastforward()
 {
-    mVideoPlugin = i;
-    emit videoChanged(mVideoPlugin);
+    m64p->SendKeyDown(102, 0);
 }
 
-int Frontend::getAudio()
+void Frontend::releaseFastforward()
 {
-    return mAudio;
+    m64p->SendKeyUp(102, 0);
 }
 
-void Frontend::setAudio(int i)
+int Frontend::SaveStateSlot()
 {
-    mAudio = i;
-    emit audioChanged(mAudio);
+    return m64p->getSaveStateSlot();
+}
+
+void Frontend::SaveStateSlot(int slot)
+{
+    m64p->setSaveStateSlot(slot);
+}
+
+void Frontend::selectState(bool save)
+{
+    m_selectStateSaving = save;
+    SystemListDialog *listDialog = new SystemListDialog(tr("Set"), tr("Cancel"));
+    listDialog->setTitle(tr("Select Save State Slot"));
+    listDialog->appendItem(tr("Save to File"));
+    int sel = SaveStateSlot();
+    if (sel == 0)
+        listDialog->appendItem("0", true, true);
+    else
+        listDialog->appendItem("0");
+    if (sel == 1)
+        listDialog->appendItem("1", true, true);
+    else
+        listDialog->appendItem("1");
+    if (sel == 2)
+        listDialog->appendItem("2", true, true);
+    else
+        listDialog->appendItem("2");
+    if (sel == 3)
+        listDialog->appendItem("3", true, true);
+    else
+        listDialog->appendItem("3");
+    if (sel == 4)
+        listDialog->appendItem("4", true, true);
+    else
+        listDialog->appendItem("4");
+    if (sel == 5)
+        listDialog->appendItem("5", true, true);
+    else
+        listDialog->appendItem("5");
+    if (sel == 6)
+        listDialog->appendItem("6", true, true);
+    else
+        listDialog->appendItem("6");
+    if (sel == 7)
+        listDialog->appendItem("7", true, true);
+    else
+        listDialog->appendItem("7");
+    if (sel == 8)
+        listDialog->appendItem("8", true, true);
+    else
+        listDialog->appendItem("8");
+    if (sel == 9)
+        listDialog->appendItem("9", true, true);
+    else
+        listDialog->appendItem("9");
+
+    connect(listDialog, SIGNAL(finished(bb::system::SystemUiResult::Type)), SLOT(saveStateSlotSelected(bb::system::SystemUiResult::Type)));
+
+    listDialog->show();
+}
+
+void Frontend::saveStateSlotSelected(bb::system::SystemUiResult::Type result)
+{
+    Q_UNUSED(result);
+    SystemListDialog *listDialog = qobject_cast<SystemListDialog*>(sender());
+    if (listDialog->buttonSelection() == listDialog->confirmButton())
+    {
+        int index = listDialog->selectedIndices()[0];
+        if (index == 0)
+        {
+            FilePicker* filePicker = new FilePicker();
+            filePicker->setType(FileType::Other);
+            if (m_selectStateSaving)
+            {
+                filePicker->setTitle(tr("Save State"));
+                filePicker->setMode(FilePickerMode::Saver);
+            }
+            else
+            {
+                filePicker->setTitle(tr("Load State"));
+                filePicker->setMode(FilePickerMode::Picker);
+            }
+            QStringList filter;
+            filter << "*.st";
+            filePicker->setFilter(filter);
+
+            filePicker->open();
+
+            connect(filePicker, SIGNAL(fileSelected(const QStringList&)), SLOT(saveStateFileSelected(const QStringList&)));
+        }
+        else
+        {
+            m64p->setSaveStateSlot(index - 1);
+            //m64p->setSaveStateSlot(index);
+            if (m_selectStateSaving)
+                m64p->SaveState();
+            else
+                m64p->LoadState();
+            emit SaveStateSlotChanged();
+        }
+    }
+    listDialog->deleteLater();
+}
+
+void Frontend::saveStateFileSelected(const QStringList &files)
+{
+    if (files.length() < 1)
+        return;
+    QString file = files[0];
+    if (!file.endsWith(".st"))
+        file += ".st";
+    if (m_selectStateSaving)
+        m64p->SaveState(file.toAscii().constData());
+    else
+        m64p->LoadState(file.toAscii().constData());
 }
 
 QSignalMapper *signalMapperToggle;
 QSignalMapper *signalMapperDropDown;
 
-void Frontend::addCheatToggle(int number){
+void Frontend::addCheatToggle(int number)
+{
 	ToggleButton *senderButton = (ToggleButton*)signalMapperToggle->mapping(number);
 
-	if(senderButton->isChecked()){
+	if(senderButton->isChecked())
 		CheatList.append(QString("%1,").arg(number));
-	} else {
+	else
 		CheatList.remove(QString("%1,").arg(number));
-	}
 }
 
-void Frontend::addCheatDropDown(int number){
+void Frontend::addCheatDropDown(int number)
+{
 	DropDown *senderDropDown = (DropDown*)signalMapperDropDown->mapping(number);
 
 	int foundLoc = -1;
@@ -1062,19 +1262,22 @@ void Frontend::addCheatDropDown(int number){
 	//1,2,3-4, or 3-4,1,2
 
 	foundLoc = CheatList.indexOf(QString("%1-").arg(number));
-	if(foundLoc != -1){
+	if(foundLoc != -1)
+	{
 		removeUntil = CheatList.indexOf(",", foundLoc);
 		CheatList.remove(foundLoc, removeUntil-foundLoc+1);
 	}
 
-	if(senderDropDown->selectedIndex() > 0 ){
+	if(senderDropDown->selectedIndex() > 0 )
+	{
 		CheatList.append(QString("%1-%2,").arg(number).arg(senderDropDown->selectedIndex()-1));
 	}
 
 	fflush(stdout);
 }
 
-Container * Frontend::createCheatToggle(sCheatInfo *pCur) {
+Container * Frontend::createCheatToggle(sCheatInfo *pCur)
+{
 	ToggleButton *toggle;
 
 	Container *returnContainer = Container::create().top(20.0f);
@@ -1082,18 +1285,19 @@ Container * Frontend::createCheatToggle(sCheatInfo *pCur) {
 	italicStyle->setFontStyle(FontStyle::Italic);
 
 	//Container with Label and Toggle
-	Container *CheatToggle = Container::create();
+	Container *CheatToggle = Container::create().left(15.0f).right(15.0f).horizontal(HorizontalAlignment::Fill);
 
-	StackLayout *pStackLayout = new StackLayout();
-	pStackLayout->setOrientation( LayoutOrientation::LeftToRight );
-	CheatToggle->setLayout(pStackLayout);
+	DockLayout *pDockLayout = new DockLayout();
+	CheatToggle->setLayout(pDockLayout);
 
-	CheatToggle->add(Label::create().text(QString(pCur->Name))
+	Container *nameContainer = Container::create().right(300);
+	nameContainer->add(Label::create().text(QString(pCur->Name))
 									.vertical(VerticalAlignment::Center)
-									.preferredWidth(768.0f)
 									.multiline(true)
 									);
-	toggle = ToggleButton::create().vertical(VerticalAlignment::Center);
+	CheatToggle->add(nameContainer);
+	toggle = ToggleButton::create().vertical(VerticalAlignment::Center)
+	                               .horizontal(HorizontalAlignment::Right);
 
 	signalMapperToggle->setMapping(toggle, pCur->Number);
 	connect(toggle, SIGNAL(checkedChanged(bool)), signalMapperToggle, SLOT(map()));
@@ -1103,13 +1307,14 @@ Container * Frontend::createCheatToggle(sCheatInfo *pCur) {
 	returnContainer->add(CheatToggle);
 
 	//Container with description label
-	if(pCur->Description != NULL){
-		Container *CheatDescription = Container::create().bottom(20.0f);
+	if(pCur->Description != NULL)
+	{
+		Container *CheatDescription = Container::create().bottom(20.0f).left(15.0f).right(15.0f);
 		CheatDescription->add(Label::create().text(QString(pCur->Description))
 				.vertical(VerticalAlignment::Center)
-				.preferredWidth(768.0f)
 				.multiline(true)
 				.textStyle(*italicStyle)
+				.visible(false)
 				);
 		returnContainer->add(CheatDescription);
 	}
@@ -1119,7 +1324,8 @@ Container * Frontend::createCheatToggle(sCheatInfo *pCur) {
 	return returnContainer;
 }
 
-Container * Frontend::createCheatDropDown(sCheatInfo *pCur){
+Container * Frontend::createCheatDropDown(sCheatInfo *pCur)
+{
 	DropDown *dropDown;
 	Option * tmp;
 
@@ -1127,31 +1333,32 @@ Container * Frontend::createCheatDropDown(sCheatInfo *pCur){
 	TextStyle *italicStyle = new TextStyle(SystemDefaults::TextStyles::bodyText());
 	italicStyle->setFontStyle(FontStyle::Italic);
 
-	dropDown = DropDown::create().vertical(VerticalAlignment::Center)
-			                     .title(QString(pCur->Name));
+	dropDown = DropDown::create().title(QString(pCur->Name));
 
-	tmp = Option::create().text("Disable").value(0);
+	tmp = Option::create().text(tr("Disable")).value(0);
 	dropDown->add(tmp);
 
-	for (int i = 0; i < pCur->Codes[pCur->VariableLine].var_count; i++) {
-		//printf("      %i: %s\n", i, pCur->Codes[pCur->VariableLine].variable_names[i]);
+	for (int i = 0; i < pCur->Codes[pCur->VariableLine].var_count; i++)
+	{
 		tmp = Option::create().text(QString("%1").arg(pCur->Codes[pCur->VariableLine].variable_names[i]))
 				              .value(i+1);
 		dropDown->add(tmp);
 	}
 
-
 	signalMapperDropDown->setMapping(dropDown, pCur->Number);
 	connect(dropDown, SIGNAL(selectedIndexChanged(int)), signalMapperDropDown, SLOT(map()));
 
-	returnContainer->add(dropDown);
+	Container *dropDownCont = Container::create().left(15.0f).right(15.0f)
+        .vertical(VerticalAlignment::Center);
+	dropDownCont->add(dropDown);
+
+	returnContainer->add(dropDownCont);
 
 	//Container with description label
 	if(pCur->Description != NULL){
-		Container *CheatDescription = Container::create().bottom(20.0f);
+		Container *CheatDescription = Container::create().bottom(20.0f).left(15.0f).right(15.0f);
 		CheatDescription->add(Label::create().text(QString(pCur->Description))
 				.vertical(VerticalAlignment::Center)
-				.preferredWidth(768.0f)
 				.multiline(true)
 				.textStyle(*italicStyle)
 				);
@@ -1163,7 +1370,8 @@ Container * Frontend::createCheatDropDown(sCheatInfo *pCur){
 	return returnContainer;
 }
 
-void Frontend::createCheatsPage(){
+void Frontend::createCheatsPage()
+{
 	char numCheats = 0;
 	CheatStart(CHEAT_SHOW_LIST, &numCheats);
 	fflush(stdout);
@@ -1175,22 +1383,25 @@ void Frontend::createCheatsPage(){
 	connect(signalMapperDropDown, SIGNAL(mapped(int)), this, SLOT(addCheatDropDown(int)));
 
 	mCheatsContainer->removeAll();
-	mCheatsContainer->setLeftPadding(20.0f);
-	mCheatsContainer->setRightPadding(20.0f);
 	sCheatInfo *pCur = l_CheatList;
 	while (pCur != NULL)
 	{
-		if (pCur->VariableLine == -1){
-			if (pCur->Description == NULL){
+		if (pCur->VariableLine == -1)
+		{
+			if (pCur->Description == NULL)
+			{
 				//printf("   %i: %s\n", pCur->Number, pCur->Name);
 				mCheatsContainer->add(createCheatToggle(pCur));
 			}
-			else {
+			else
+			{
 				//printf("   %i: %s (%s)\n", pCur->Number, pCur->Name, pCur->Description);
 				mCheatsContainer->add(createCheatToggle(pCur));
 			}
 		//TODO: Check if this is true and make a dropdown
-		} else {
+		}
+		else
+		{
 			//int i;
 			mCheatsContainer->add(createCheatDropDown(pCur));
 			//for (i = 0; i < pCur->Codes[pCur->VariableLine].var_count; i++)
@@ -1200,47 +1411,6 @@ void Frontend::createCheatsPage(){
 	}
 
 	CheatFreeAll();
-}
-
-int Frontend::getInputValue(int player, QString value){
-	int i;
-
-	if(value == "present") {
-		return m64p->controller[player].present;
-	}
-	if(value == "device") {
-		return m64p->controller[player].device;
-	}
-	if(value == "layout") {
-		return m64p->controller[player].layout;
-	}
-	if (value == "plugin") {
-		return m64p->controller[player].plugin;
-	}
-	if (value == "controller") {
-	}
-
-	for(i = 0; i < 16; ++i) {
-		if(button_names[i] == value) {
-			return m64p->controller[player].button[i];
-		}
-	}
-	for (i = 0; i < 4; i++) {
-		if (button_names[i + 18] == value) {
-			return m64p->controller[player].diagonals[i];
-		}
-	}
-
-	if(value == "X Axis Left") {
-		return m64p->controller[player].axis[0].a;
-	} else if (value == "X Axis Right") {
-		return m64p->controller[player].axis[0].b;
-	} else if (value == "Y Axis Up") {
-		return m64p->controller[player].axis[1].a;
-	} else if (value == "Y Axis Down") {
-		return m64p->controller[player].axis[1].b;
-	}
-	return -1;
 }
 
 QString Frontend::getMogaInputCharacter(int value)
@@ -1291,91 +1461,91 @@ QString Frontend::getMogaInputCharacter(int value)
 	case 1 << EXT_BUTTON_R4:
 		return "R4";
 	default:
-		return "Invalid";
+		return tr("Not Mapped");
 	}
 }
 
 QString Frontend::getInputCharacter(int value)
 {
 	if (value < 0)
-		return "Invalid";
+		return tr("Not Mapped");
 	if (value >= KEYCODE_A && value <= KEYCODE_Z)
 		return QString(QChar((char)(value - KEYCODE_A + Qt::Key_A)));
 	if (value >= KEYCODE_CAPITAL_A && value <= KEYCODE_CAPITAL_Z)
 		return QString(QChar((char)(value - KEYCODE_CAPITAL_A + Qt::Key_A))).toUpper();
 	switch (value) {
 	case KEYCODE_ESCAPE:
-		return "Escape";
+		return tr("Escape");
 	case KEYCODE_RETURN:
-		return "Enter";
+		return tr("Enter");
 	case KEYCODE_LEFT:
-		return "Left";
+		return tr("Left");
 	case KEYCODE_RIGHT:
-		return "Right";
+		return tr("Right");
 	case KEYCODE_UP:
-		return "Up";
+		return tr("Up");
 	case KEYCODE_DOWN:
-		return "Down";
+		return tr("Down");
 	case KEYCODE_BACKSPACE:
-		return "Backspace";
+		return tr("Backspace");
 	case KEYCODE_LEFT_SHIFT:
-		return "Left Shift";
+		return tr("Left Shift");
 	case KEYCODE_RIGHT_SHIFT:
-		return "Right Shift";
+		return tr("Right Shift");
 	case KEYCODE_LEFT_CTRL:
-		return "Left Control";
+		return tr("Left Control");
 	case KEYCODE_RIGHT_CTRL:
-		return "Right Control";
+		return tr("Right Control");
 	case KEYCODE_LEFT_ALT:
-		return "Left Alt";
+		return tr("Left Alt");
 	case KEYCODE_RIGHT_ALT:
-		return "Right Alt";
+		return tr("Right Alt");
 	case KEYCODE_TAB:
-		return "Tab";
+		return tr("Tab");
 	case KEYCODE_INSERT:
-		return "Insert";
+		return tr("Insert");
 	case KEYCODE_DELETE:
-		return "Delete";
+		return tr("Delete");
 	case KEYCODE_HOME:
-		return "Home";
+		return tr("Home");
 	case KEYCODE_END:
-		return "End";
+		return tr("End");
 	case KEYCODE_PG_UP:
-		return "Page Up";
+		return tr("Page Up");
 	case KEYCODE_PG_DOWN:
-		return "Page Down";
+		return tr("Page Down");
 	case KEYCODE_KP_PLUS:
-		return "KP Plus";
+		return tr("Keypad Plus");
 	case KEYCODE_KP_MINUS:
-		return "KP Minus";
+		return tr("Keypad Minus");
 	case KEYCODE_KP_MULTIPLY:
-		return "KP Mul";
+		return tr("Keypad Multiply");
 	case KEYCODE_KP_DIVIDE:
-		return "KP Div";
+		return tr("Keypad Divide");
 	case KEYCODE_KP_ENTER:
-		return "KP Ent";
+		return tr("Keypad Enter");
 	case KEYCODE_KP_HOME:
-		return "KP Home";
+		return tr("Keypad Home");
 	case KEYCODE_KP_UP:
-		return "KP Up";
+		return tr("Keypad Up");
 	case KEYCODE_KP_PG_UP:
-		return "KP Pg Up";
+		return tr("Keypad Page Up");
 	case KEYCODE_KP_LEFT:
-		return "KP Left";
+		return tr("Keypad Left");
 	case KEYCODE_KP_FIVE:
-		return "KP 5";
+		return tr("Keypad 5");
 	case KEYCODE_KP_RIGHT:
-		return "KP Right";
+		return tr("Keypad Right");
 	case KEYCODE_KP_END:
-		return "KP End";
+		return tr("Keypad End");
 	case KEYCODE_KP_DOWN:
-		return "KP Down";
+		return tr("Keypad Down");
 	case KEYCODE_KP_PG_DOWN:
-		return "KP Pg Dn";
+		return tr("Keypad Page Down");
 	case KEYCODE_KP_INSERT:
-		return "KP Insert";
+		return tr("Keypad Insert");
 	case KEYCODE_KP_DELETE:
-		return "KP Delete";
+		return tr("Keypad Delete");
 	case KEYCODE_F1:
 	case KEYCODE_F2:
 	case KEYCODE_F3:
@@ -1476,244 +1646,57 @@ QString Frontend::getInputCharacter(int value)
 	}
 }
 
-void Frontend::setInputValue(int player, QString button, int value){
-	int i;
-
-	if(button == "present"){
-		m64p->controller[player].present = value;
-		return;
-	}
-	if(button == "device") {
-		m64p->controller[player].device = value;
-		return;
-	}
-	if(button == "plugin"){
-		m64p->controller[player].plugin = value;
-		return;
-	}
-	if(button == "layout"){
-		m64p->controller[player].layout = value;
-		return;
-	}
-
-	for(i=0; i<16; ++i){
-		if(button_names[i] == button){
-			m64p->controller[player].button[i] = value;
-			return;
-		}
-	}
-	for (i = 0; i < 4; i++) {
-		if (button_names[i + 18] == button) {
-			m64p->controller[player].diagonals[i] = value;
-			return;
-		}
-	}
-
-	if(button == "X Axis Left"){
-		m64p->controller[player].axis[0].a = value;
-		return;
-	}
-	if (button == "X Axis Right"){
-		m64p->controller[player].axis[0].b = value;
-		return;
-	}
-	if (button == "Y Axis Up"){
-		m64p->controller[player].axis[1].a = value;
-		return;
-	}
-	if (button == "Y Axis Down"){
-		m64p->controller[player].axis[1].b = value;
-		return;
-	}
-}
-
-void Frontend::setControllerID(int player, QString value)
+int Frontend::getControllerIndex(const QString &id)
 {
-	strcpy(m64p->controller[player].gamepadId, value.left(63).toAscii().data());
-	m64p->controller[player].gamepadId[63] = '\0';
-}
-
-QString Frontend::getControllerID(int player)
-{
-	return QString::fromAscii(m64p->controller[player].gamepadId);
-}
-
-int Frontend::getControllerIndex(int player)
-{
-	QString did = getControllerID(player);
 	for (int i = 0; i < m_devices->size(); i++)
 	{
-		QString id = m_devices->value(i)["id"].toString();
-		if (QString::compare(did, id) == 0)
+		QString cid = m_devices->value(i)["id"].toString();
+		if (QString::compare(cid, id) == 0)
 			return i + 1;
 	}
 	return 0;
 }
 
-void Frontend::setControllerIndex(int player, int index)
+void Frontend::SaveState()
 {
-	QString id = m_devices->value(index - 1)["id"].toString();
-	setControllerID(player, id);
-}
-
-int vkbToMoga(int moga)
-{
-	switch (moga)
-	{
-	case 1:
-		return 1;
-	case 2:
-		return 2;
-	case 8:
-		return 3;
-	case 16:
-		return 4;
-	case 64:
-		return 5;
-	case 128:
-		return 6;
-	case 1024:
-		return 7;
-	case 2048:
-		return 8;
-	case 4096:
-		return 9;
-	case 8192:
-		return 10;
-	case 16384:
-		return 11;
-	case 32768:
-		return 12;
-	case 65536:
-		return 13;
-	case 131072:
-		return 14;
-	case 262144:
-		return 15;
-	case 524288:
-		return 16;
-	}
-	return -1;
-}
-
-int mogaToVkb(int vkb)
-{
-	switch (vkb)
-	{
-	case 1:
-		return 1;
-	case 2:
-		return 2;
-	case 3:
-		return 8;
-	case 4:
-		return 16;
-	case 5:
-		return 64;
-	case 6:
-		return 128;
-	case 7:
-		return 1024;
-	case 8:
-		return 2048;
-	case 9:
-		return 4096;
-	case 10:
-		return 8192;
-	case 11:
-		return 16384;
-	case 12:
-		return 32768;
-	case 13:
-		return 65536;
-	case 14:
-		return 131073;
-	case 15:
-		return 262144;
-	case 16:
-		return 524288;
-	}
-	return -1;
-}
-
-void Frontend::setMogaInputValue(int player, QString button, int index)
-{
-	int vkb = mogaToVkb(index);
-	if(button == "X Axis Left") {
-		m64p->controller[player].axis[0].a = vkb;
-		return;
-	}
-	if (button == "X Axis Right") {
-		m64p->controller[player].axis[0].b = vkb;
-		return;
-	}
-	if (button == "Y Axis Up") {
-		m64p->controller[player].axis[1].a = vkb;
-		return;
-	}
-	if (button == "Y Axis Down") {
-		m64p->controller[player].axis[1].b = vkb;
-		return;
-	}
-	for(int i=0; i<16; ++i)
-	{
-		if(button_names[i] == button) {
-			m64p->controller[player].button[i] = vkb;
-			return;
-		}
-	}
-}
-
-int Frontend::getMogaInputValue(int player, QString button)
-{
-	if(button == "X Axis Left")
-		return vkbToMoga(m64p->controller[player].axis[0].a);
-	if (button == "X Axis Right")
-		return vkbToMoga(m64p->controller[player].axis[0].b);
-	if (button == "Y Axis Up")
-		return vkbToMoga(m64p->controller[player].axis[1].a);
-	if (button == "Y Axis Down")
-		return vkbToMoga(m64p->controller[player].axis[1].b);
-	for(int i=0; i<16; ++i)
-	{
-		if(button_names[i] == button)
-			return vkbToMoga(m64p->controller[player].button[i]);
-	}
-	return 0;
-}
-
-void Frontend::SaveState(){
 	m64p->SaveState();
 }
 
-void Frontend::LoadState() {
+void Frontend::LoadState()
+{
 	m64p->LoadState();
 }
 
-void Frontend::LoadTouchOverlay() {
+void Frontend::LoadTouchOverlay()
+{
 	m64p->LoadTouchOverlay();
 }
 
-void Frontend::ExitEmulator() {
+void Frontend::ExitEmulator()
+{
 	m64p->ExitEmulator();
 	m_emuRunning = false;
 }
 
-int Frontend::mapButton(){
+int Frontend::mapButton()
+{
 
 	int msg = 0, ret = 0;
 
 	toastButton->cancel();
-	toast->setBody("Press a Button to Map");
+	toast->setBody(tr("Press a Button to Map"));
 	toast->show();
 
 	MsgSend(coid, &msg, sizeof(msg), &ret, sizeof(ret));
 
 	toast->cancel();
-	if(ret != -1){
-		toastButton->setBody("Button Pressed");
-	} else {
-		toastButton->setBody("Canceling");
+	if(ret != -1)
+	{
+		toastButton->setBody(tr("Button Pressed"));
+	}
+	else
+	{
+		toastButton->setBody(tr("Cancelling"));
 	}
 	toastButton->show();
 
@@ -1745,7 +1728,8 @@ void Frontend::onBoxArtRecieved(const QString &info, bool success)
 {
     TwitterRequest *request = qobject_cast<TwitterRequest*>(sender());
 
-    if (success) {
+    if (success)
+    {
     	XmlDataAccess dataAccess;
     	QString url = "";
 
@@ -1769,11 +1753,10 @@ void Frontend::onBoxArtRecieved(const QString &info, bool success)
 		//qDebug() << "GAME: " << game;
 
 		QVariantMap selected;
-		if(!game.isEmpty()){
+		if(!game.isEmpty())
 			selected = game[0].toMap();
-		} else {
+		else
 			selected = games["Game"].toMap();
-		}
 		QVariantMap images = selected["Images"].toMap();
 		QVariantList boxart = images["boxart"].toList();
 
@@ -1782,9 +1765,8 @@ void Frontend::onBoxArtRecieved(const QString &info, bool success)
 		//qDebug() << "FULL URL: " << url;
 
 		//Could make obj once, and reuse
-		if(m_boxart) {
+		if(m_boxart)
 			delete m_boxart;
-		}
 
 		m_boxart = new ImageLoader(url, mRom);
 		emit boxArtChanged(m_boxart);
@@ -1820,7 +1802,7 @@ void Frontend::onVersionRecieved(const QString &info, bool success)
     					if (maj > VERSION_MAJOR || min > VERSION_MINOR || rel > VERSION_RELEASE)
     					{
     						SystemToast *toast = new SystemToast();
-    						toast->setBody(QString("Version %1.%2.%3 of Mupen64+ BB is available to upgrade your %4.%5.%6")
+    						toast->setBody(tr("Version %1.%2.%3 of Mupen64+ BB is available to upgrade your %4.%5.%6")
     								.arg(list[0], list[1], list[2],
     										QString::number(VERSION_MAJOR), QString::number(VERSION_MINOR), QString::number(VERSION_RELEASE)));
     						toast->show();
@@ -1839,45 +1821,45 @@ static QString detect_gamepad_type(GameController* controller)
 {
 	if (strstr(controller->id, "057E-0306") || strstr(controller->id, "057E-0330"))
 	{
-		strlcpy(controller->name, "Wiimote", sizeof(controller->name));
+		strlcpy(controller->name, QObject::tr("Wiimote").toAscii().constData(), sizeof(controller->name));
 		return "asset:///images/wii.png";
 	}
 	else if (strstr(controller->id, "20D6-0DAD"))
 	{
-		strlcpy(controller->name, "MOGA Pro", sizeof(controller->name));
+		strlcpy(controller->name, QObject::tr("MOGA Pro").toAscii().constData(), sizeof(controller->name));
 		return "asset:///images/moga.png";
 	}
 	else if (strstr(controller->id, "25B6-0001"))
 	{
-		strlcpy(controller->name, "Fructel Gametel", sizeof(controller->name));
+		strlcpy(controller->name, QObject::tr("Fructel Gametel").toAscii().constData(), sizeof(controller->name));
 		return "asset:///images/gametel.png";
 	}
 	else if (strstr(controller->id, "1038-1412"))
 	{
-		strlcpy(controller->name, "SteelSeries Free", sizeof(controller->name));
+		strlcpy(controller->name, QObject::tr("SteelSeries Free").toAscii().constData(), sizeof(controller->name));
 		return "asset:///images/steelseries.png";
 	}
 	else if (strstr(controller->id, "046D-C21D"))
 	{
-		strlcpy(controller->name, "Logitech F310", sizeof(controller->name));
+		strlcpy(controller->name, QObject::tr("Logitech F310").toAscii().constData(), sizeof(controller->name));
 		return "asset:///images/logitech.png";
 	}
 	else if (strstr(controller->id, "045E-028E"))
 	{
-		strlcpy(controller->name, "Microsoft XBox 360", sizeof(controller->name));
+		strlcpy(controller->name, QObject::tr("Microsoft XBox 360").toAscii().constData(), sizeof(controller->name));
 		return "asset:///images/xbox360.png";
 	}
 	else if (strstr(controller->id, "045E-0291"))
 	{
-		strlcpy(controller->name, "Microsoft XBox 360 Wireless", sizeof(controller->name));
+		strlcpy(controller->name, QObject::tr("Microsoft XBox 360 Wireless").toAscii().constData(), sizeof(controller->name));
 		return "asset:///images/xbox360w.png";
 	}
 	else if (strstr(controller->id, "1689-FD01"))
 	{
-		strlcpy(controller->name, "Razer XBox 360", sizeof(controller->name));
+		strlcpy(controller->name, QObject::tr("Razer XBox 360").toAscii().constData(), sizeof(controller->name));
 		return "asset:///images/razer.png";
 	}
-	strlcpy(controller->name, "Gamepad", sizeof(controller->name));
+	strlcpy(controller->name, QObject::tr("Unknown Gamepad").toAscii().constData(), sizeof(controller->name));
 	return "asset:///images/ca_bluetooth.png";
 }
 
@@ -1885,25 +1867,30 @@ void Frontend::discoverControllers()
 {
 	int deviceCount;
 	screen_get_context_property_iv(screen_cxt, SCREEN_PROPERTY_DEVICE_COUNT, &deviceCount);
-	fprintf(stderr, "%d connected devices\n", deviceCount);
+	if (debug_mode)
+	    fprintf(stderr, "%d connected devices\n", deviceCount);
 	screen_device_t* devices = (screen_device_t*)calloc(deviceCount, sizeof(screen_device_t));
 	screen_get_context_property_pv(screen_cxt, SCREEN_PROPERTY_DEVICES, (void**)devices);
 
 	// Scan the list for gamepad and joystick devices.
 	int i;
 	int controllerIndex = 0;
-	for (i = 0; i < deviceCount; i++) {
+	for (i = 0; i < deviceCount; i++)
+	{
 		int type;
 		screen_get_device_property_iv(devices[i], SCREEN_PROPERTY_TYPE, &type);
 
-		if (type == SCREEN_EVENT_GAMEPAD || type == SCREEN_EVENT_JOYSTICK) {
-			fprintf(stderr, "Found a gamepad\n");
+		if (type == SCREEN_EVENT_GAMEPAD || type == SCREEN_EVENT_JOYSTICK)
+		{
+		    if (debug_mode)
+		        fprintf(stderr, "Found a gamepad\n");
 			GameController *control = &_controllers[controllerIndex];
 			control->handle = devices[i];
 			screen_get_device_property_iv(devices[i], SCREEN_PROPERTY_TYPE, &control->type);
 			screen_get_device_property_cv(devices[i], SCREEN_PROPERTY_ID_STRING, sizeof(control->id), control->id);
 			screen_get_device_property_iv(devices[i], SCREEN_PROPERTY_BUTTON_COUNT, &control->buttonCount);
-			fprintf(stderr, "Gamepad %s with %d buttons\n", control->id, control->buttonCount);
+            if (debug_mode)
+                fprintf(stderr, "Gamepad %s with %d buttons\n", control->id, control->buttonCount);
 			QVariantMap map;
 			map["id"] = QString::fromAscii(control->id);
 			QString res = detect_gamepad_type(control);
@@ -1918,25 +1905,31 @@ void Frontend::discoverControllers()
 				map["name"] = "Joystick (" + QString(control->id) + ")";
 			}
 			QString desc = "Has " + QString::number(control->buttonCount, 10) + " buttons";
-			if (!screen_get_device_property_iv(devices[i], SCREEN_PROPERTY_ANALOG0, control->analog0)) {
+			if (!screen_get_device_property_iv(devices[i], SCREEN_PROPERTY_ANALOG0, control->analog0))
+			{
 				control->analogCount++;
-				fprintf(stderr, "Device has analog0\n");
-				if (!screen_get_device_property_iv(devices[i], SCREEN_PROPERTY_ANALOG1, control->analog1)) {
+	            if (debug_mode)
+	                fprintf(stderr, "Device has analog0\n");
+				if (!screen_get_device_property_iv(devices[i], SCREEN_PROPERTY_ANALOG1, control->analog1))
+				{
 					control->analogCount++;
-					fprintf(stderr, "Device has analog1\n");
+		            if (debug_mode)
+		                fprintf(stderr, "Device has analog1\n");
 					desc += " with analog0 and analog1";
 				}
 				else
 					desc += " with analog0";
 			}
-			else if (!screen_get_device_property_iv(devices[i], SCREEN_PROPERTY_ANALOG1, control->analog1)) {
+			else if (!screen_get_device_property_iv(devices[i], SCREEN_PROPERTY_ANALOG1, control->analog1))
+			{
 				control->analogCount++;
-				fprintf(stderr, "Device has analog1\n");
+	            if (debug_mode)
+	                fprintf(stderr, "Device has analog1\n");
 				desc += " with analog1";
 			}
 			map["description"] = desc;
 			(*m_devices) << map;
-			emit createOption(QString::fromAscii(control->name), QUrl(res));
+			emit createOption(QString::fromAscii(control->name), QString::fromAscii(control->id), QUrl(res));
 			controllerIndex++;
 		}
 	}
@@ -1945,7 +1938,7 @@ void Frontend::discoverControllers()
 	emit controllersDetected();
 }
 
-void Frontend::onCreateOption(QString name, QUrl imageSource)
+void Frontend::onCreateOption(QString name, QString value, QUrl imageSource)
 {
 	for (int i = 0; i < 4; i++)
 	{
@@ -1955,6 +1948,7 @@ void Frontend::onCreateOption(QString name, QUrl imageSource)
 			Option *opt = Option::create()
 							.parent(deviceDropdown)
 							.text(name)
+							.value(value)
 							.imageSource(imageSource);
 			deviceDropdown->add(opt);
 		}
@@ -1969,7 +1963,8 @@ void Frontend::detectHDMI()
 		m_hdmiInfo = new DisplayInfo(hdmi, this);
 		if (m_hdmiInfo->isAttached())
 		{
-			fprintf(stderr, "Second Display: %s\nSize: (%d, %d)\n", m_hdmiInfo->displayName().toStdString().c_str(),
+		    if (debug_mode)
+		        fprintf(stderr, "Second Display: %s\nSize: (%d, %d)\n", m_hdmiInfo->displayName().toStdString().c_str(),
 					m_hdmiInfo->pixelSize().width(), m_hdmiInfo->pixelSize().height());
 			emit hdmiDetected(true);
 			connect(m_hdmiInfo, SIGNAL(attachedChanged(bool)), this, SIGNAL(hdmiDetected(bool)));
@@ -1994,17 +1989,30 @@ void Frontend::onInvoke(const bb::system::InvokeRequest& request)
 			file = file.mid(6);
 		emit invoked(file, true);
 	}
+	else if (QString::compare(target, "com.emulator.mupen64p.load") == 0)
+	{
+		QString file = request.uri().toString();
+		if (file.startsWith("m64://"))
+			file = file.mid(6);
+		emit invoked(file, false);
+	}
 }
 
-bool Frontend::createShortcut(const QString& name, const QString& icon, const QString& location)
+bool Frontend::createShortcut(const QString& name, const QString& icon, const QString& location, bool run)
 {
-	fprintf(stderr, "Shortcut: %s, %s, %s\n", name.toAscii().data(), icon.toAscii().data(), location.toAscii().data());
+    if (debug_mode)
+        fprintf(stderr, "Shortcut: %s, %s, %s\n", name.toAscii().data(), icon.toAscii().data(), location.toAscii().data());
 	HomeScreen homeScreen;
-	bool result = homeScreen.addShortcut(QUrl(icon), name, QUrl("n64://" + location));
+	QString temp;
+	if (run)
+		temp = "n64://";
+	else
+		temp = "m64://";
+	bool result = homeScreen.addShortcut(QUrl(icon), name, QUrl(temp + location));
 	if (!result)
 	{
 		SystemToast *toast = new SystemToast();
-		toast->setBody("Error creating shortcut");
+		toast->setBody(tr("Error creating shortcut"));
 		toast->show();
 	}
 	return result;

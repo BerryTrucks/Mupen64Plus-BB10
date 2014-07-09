@@ -2,6 +2,7 @@
 #include <iostream>
 
 #include "emulator.h"
+#include "frontend.h"
 #include <dlfcn.h>
 
 /*#ifdef __cplusplus
@@ -97,7 +98,8 @@ static m64p_error OpenConfigurationHandles(void);
 static m64p_error SaveConfigurationOptions(void);
 void DebugCallback(void *Context, int level, const char *message);
 
-Emulator::Emulator(char * groupId, char * windowId){
+Emulator::Emulator(char * groupId, char * windowId)
+{
 	g_groupId = strdup(groupId);
 	g_windowId = strdup(windowId);
 
@@ -116,14 +118,15 @@ Emulator::Emulator(char * groupId, char * windowId){
 	g_InputPlugin = NULL;
 	g_RspPlugin = NULL;
 
-    /* load the Mupen64Plus core library */
-    if (AttachCoreLib(l_CoreLibPath) != M64ERR_SUCCESS) {
+    // load the Mupen64Plus core library
+    if (AttachCoreLib(l_CoreLibPath) != M64ERR_SUCCESS)
+    {
         fprintf(stderr, "UI-console: AttachCoreLib failed\n");
         return;
     }
     fprintf(stderr, "UI-console: AttachCoreLib succeeded\n");
 
-    /* start the Mupen64Plus core library, load the configuration file */
+    // start the Mupen64Plus core library, load the configuration file
     m64p_error rval = (*CoreStartup)(CONSOLE_API_VERSION, l_ConfigDirPath, l_DataDirPath, (void*)"Core", DebugCallback, NULL, NULL);
     if (rval != M64ERR_SUCCESS)
     {
@@ -162,7 +165,8 @@ Emulator::~Emulator(){
 		*/
 }
 
-void Emulator::SetRom(const char * rom ){
+void Emulator::SetRom(const char * rom )
+{
 	printf("Setting Rom: %s\n", rom);fflush(stdout);
 	l_ROMFilepath = strdup(rom);
 }
@@ -271,7 +275,8 @@ unsigned char* Emulator::loadFromZip(int* error, size_t* size)
 	return ROM_buffer;
 }
 
-int Emulator::LoadRom(){
+int Emulator::LoadRom()
+{
 	static bool romOpened;
 /* load ROM image */
 	printf("Loading Rom...\n");fflush(stdout);
@@ -323,21 +328,21 @@ int Emulator::LoadRom(){
 	return 0;
 }
 
-int Emulator::Start(){
+int Emulator::Start()
+{
 	int rc = -1;
     current_overlay = overlay_request;
 
-
-	if(bbutil_init_egl(screen_cxt, g_groupId, g_windowId) != 0){
+	if(bbutil_init_egl(screen_cxt, g_groupId, g_windowId) != 0)
+	{
 		printf("Error initializing EGL...\n");fflush(stdout);
 		return -1;
 	}
 
-
-
 	printf("Finished EGl init...\n");fflush(stdout);
 
-	if( BPS_SUCCESS != dialog_request_events(0) ){
+	if( BPS_SUCCESS != dialog_request_events(0) )
+	{
 		printf("Error Initializing Dialog events...\n");
 		return -1;
 	}
@@ -404,7 +409,10 @@ int Emulator::Start(){
 		}
 	}
 
-	bbutil_focus();
+	if (use_gamepad)
+	    emit focusScreen();
+	else
+	    bbutil_focus();
 
 	/* run the game */
 	(*CoreDoCommand)(M64CMD_EXECUTE, 0, NULL);
@@ -590,7 +598,8 @@ int Emulator::SetConfigParameter(string ParamSpec)
 }
 
 //Input Stuff
-int Emulator::init_controller_config() {
+int Emulator::init_controller_config()
+{
 	int i, j;
 
 	for(i=0; i<4; ++i){
@@ -604,22 +613,27 @@ int Emulator::init_controller_config() {
 		{
 			controller[i].diagonals[j] = -1;
 		}
-		for(j=0; j<16; ++j){
+		for(j=0; j<16; ++j)
+		{
 			controller[i].button[j] = -1;
 		}
-		for(j=0; j<2; ++j){
+		for(j=0; j<2; ++j)
+		{
 			controller[i].axis[j].a = -1;
 			controller[i].axis[j].b = -1;
 		}
 
-		for(j=0; j<2; ++j){
+		for(j=0; j<2; ++j)
+		{
 			controller[i].analogDeadZone[j] = 0;
 			controller[i].analogPeak[2] = 0;
 		}
 	}
+	return 1;
 }
 
-int Emulator::print_controller_config() {
+int Emulator::print_controller_config()
+{
 	int i, j;
 
 	for(i=0; i<4; ++i){
@@ -647,11 +661,13 @@ int Emulator::print_controller_config() {
 			fprintf(stderr, "AnalogPeak%d: %d\n", j, controller[i].analogPeak[j]);
 		}
 	}
+	return 1;
 }
 
-int Emulator::load_controller_config(const char *SectionName, int i) {
+int Emulator::load_controller_config(const char *SectionName, int i)
+{
     m64p_handle pConfig;
-    char input_str[256], value1_str[16];
+    char input_str[256];
     const char *config_ptr;
     int readOK, j;
 
@@ -755,9 +771,15 @@ void Emulator::save_controller_config(int iCtrlIdx)
     	return;
     }
     //Touchscreen/Keyboard
-    else if (controller[iCtrlIdx].device == -5) {
+    else if (controller[iCtrlIdx].device == -5)
+    {
         if (controller[iCtrlIdx].present)
-            overlay_request = 4;
+        {
+            if (q10_rotate < 0)
+                overlay_request = 5;
+            else
+                overlay_request = 4;
+        }
     }
 
     sprintf(Param, "%i,%i", controller[iCtrlIdx].analogDeadZone[0], controller[iCtrlIdx].analogDeadZone[1]);
@@ -834,25 +856,69 @@ void Emulator::save_controller_config(int iCtrlIdx)
     ConfigSaveFile();
 }
 
-void Emulator::SaveState(){
-	CoreDoCommand(M64CMD_STATE_SAVE,1,NULL);
-	save = 1;
+void Emulator::SaveState(const char* filename)
+{
+    if (!filename)
+        CoreDoCommand(M64CMD_STATE_SAVE, 1, NULL);
+    else
+    {
+        printf("strdup %s\n", filename);
+        char* file = strdup(filename);
+        CoreDoCommand(M64CMD_STATE_SAVE, 1, file);
+        save = 1;
+        if (file)
+            free(file);
+    }
 }
 
-void Emulator::LoadState(){
-	CoreDoCommand(M64CMD_STATE_LOAD,0,NULL);
-	load = 1;
+void Emulator::LoadState(const char* filename)
+{
+    if (!filename)
+        CoreDoCommand(M64CMD_STATE_LOAD, 0, NULL);
+    else
+    {
+        char* file = strdup(filename);
+        CoreDoCommand(M64CMD_STATE_LOAD, 0, file);
+        load = 1;
+        if (file)
+            free(file);
+    }
 }
 
-void Emulator::LoadTouchOverlay() {
+void Emulator::SendKeyDown(int key, int mod)
+{
+    int keycode = (key & 0xffff) | ((mod & 0xffff) << 16);
+    CoreDoCommand(M64CMD_SEND_SDL_KEYDOWN, keycode, NULL);
+}
+
+void Emulator::SendKeyUp(int key, int mod)
+{
+    int keycode = (key & 0xffff) | ((mod & 0xffff) << 16);
+    CoreDoCommand(M64CMD_SEND_SDL_KEYUP, keycode, NULL);
+}
+
+int Emulator::getSaveStateSlot()
+{
+    int slot;
+    CoreDoCommand(M64CMD_CORE_STATE_QUERY, M64CORE_SAVESTATE_SLOT, (void*)&slot);
+    return slot;
+}
+
+void Emulator::setSaveStateSlot(int slot)
+{
+    CoreDoCommand(M64CMD_STATE_SET_SLOT, slot, NULL);
+}
+
+void Emulator::LoadTouchOverlay()
+{
 	current_overlay++;
-	if(current_overlay == 4) {
+	if(current_overlay == 4)
 	    current_overlay = 0;
-	}
 	overlay_request = current_overlay;
 }
 
-void Emulator::ExitEmulator(){
+void Emulator::ExitEmulator()
+{
 
 	set_z_order(-10);
 	int vis = 0;
