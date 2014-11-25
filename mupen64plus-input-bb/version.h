@@ -26,7 +26,7 @@
 #if !defined(VERSION_H)
 #define VERSION_H
 
-#define PLUGIN_NAME    "Mupen64Plus SDL Input Plugin"
+#define PLUGIN_NAME    "Mupen64Plus BB Input Plugin"
 #define PLUGIN_VERSION 0x020002
 #define PLUGIN_API_VERSION 0x020100
 
