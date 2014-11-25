@@ -27,11 +27,14 @@
 #include <dirent.h>
 #include <string.h>
 #define OVERLAY_DIR "app/native/assets/images"
+#define OVERLAY_EXTERNAL_DIR "shared/misc/n64/data"
 
 #include <stdlib.h>
 
 TouchButton touchButtons[14];
+TouchButton secondZed;
 TouchStick touchStick;
+TouchStick touchStick2;
 
 int showMenu = 1;
 int showController = 1;
@@ -43,7 +46,7 @@ int overlayCount = 0;
 char** availableOverlays;
 overlay_t overlay_current;
 
-char * overlays[6];
+char * overlays[8];
 
 void LoadOverlay(char* name)
 {
@@ -62,15 +65,21 @@ void LoadOverlay(char* name)
 		delete_image(overlayQuad, 0);
 		delete_image(overlayKey, 1);
 		delete_image(stickQuad, 0);
+		delete_image(stickQuad2, 0);
 	}
 
 
 	printf("\nLoading Overlay Key...\n");fflush(stdout);
 
 	char * s_width;
+	int size = strlen(OVERLAY_DIR);
 	if (overlay_request == 4 || overlay_request == 5){
 		printf("Width 720 detected...\n");fflush(stdout);
 		s_width = strdup("720");
+	}else if (overlay_request == 6){
+		printf("Width 1280 detected...\n");fflush(stdout);
+		s_width = strdup("1280");
+		size = strlen(OVERLAY_EXTERNAL_DIR);
 	}else if(width == 1280){
 		printf("Width 1280 detected...\n");fflush(stdout);
 		s_width = strdup("1280");
@@ -79,23 +88,29 @@ void LoadOverlay(char* name)
 		s_width = strdup("1024");
 	}
 
-	char* tmp = malloc(sizeof(char) * (strlen(OVERLAY_DIR) + strlen(name) + strlen(s_width) + 5 + 4 + 2)); // Name+Stick+.png+NULL
+	char* tmp = malloc(sizeof(char) * (size + strlen(name) + strlen(s_width) + 5 + 4 + 2)); // Name+Stick+.png+NULL
 
 	//OverlayKey is only a pix buffer, not a texture as it's not used to render
-	sprintf(tmp,"%s/%s%sKey.png",OVERLAY_DIR, name, s_width);
+	if (overlay_request == 6)
+		sprintf(tmp,"%s/%s%sKey.png",OVERLAY_EXTERNAL_DIR, name, s_width);
+	else
+		sprintf(tmp,"%s/%s%sKey.png",OVERLAY_DIR, name, s_width);
 	overlayKey = create_image(tmp, 0, 0, 1);
 	if(overlayKey != NULL) {
 		overlayKey->text = strdup(name);
 	}
 
-	sprintf(tmp,"%s/%s.png",OVERLAY_DIR,name);
+	if (overlay_request == 6)
+		sprintf(tmp,"%s/%s.png",OVERLAY_EXTERNAL_DIR,name);
+	else
+		sprintf(tmp,"%s/%s.png",OVERLAY_DIR,name);
 	overlayQuad = create_image(tmp, 0, 0, 0);
 	if(overlayQuad != NULL) {
 		overlayQuad->text = strdup(name);
-		if (overlay_request != 3)
-			overlayQuad->scale = 1.25f;
-		else
+		if (overlay_request == 3 || overlay_request >= 6)
 			overlayQuad->scale = 1.40625f;
+		else
+			overlayQuad->scale = 1.25f;
 	}
 	
 
@@ -104,11 +119,20 @@ void LoadOverlay(char* name)
 	if(stickQuad != NULL) {
 		stickQuad->text = strdup(name);
 	}
+	
+	if (overlay_request == 7)
+	{
+		stickQuad2 = create_image(tmp, 0, 0, 0);
+		if (stickQuad2 != NULL) {
+			stickQuad2->text = strdup(name);
+		}
+	}
 
 	free(tmp);
 
 	//Search for centre pixel and radius pixel
 	float touchCentreX=0,touchCentreY=0,touchRadiusX=100,touchRadiusY=100;
+	float touchCentreX2=0,touchCentreY2=0,touchRadiusX2=100,touchRadiusY2=100;
 	Uint32* p = (Uint32*)overlayKey->raw_pix;
 	int x,y;
 	for(y = 0;y < (int)overlayKey->textureH;y++)
@@ -127,6 +151,21 @@ void LoadOverlay(char* name)
 				touchRadiusX = x;
 				touchRadiusY = y;
 			}
+			else if (overlay_request == 7)
+			{
+				if (*p == SDL_Swap32(0x64FFFFFF))//Centre 2
+				{
+					DebugMessage(M64MSG_VERBOSE, "Found second centre %i %i", x, y);
+					touchCentreX2 = x;
+					touchCentreY2 = y;
+				}
+				else if (*p == SDL_Swap32(0x96FFFCFF))//Radius 2
+				{
+					DebugMessage(M64MSG_VERBOSE, "Found second radius %i %i", x, y);
+					touchRadiusX2 = x;
+					touchRadiusY2 = y;
+				}
+			}
 			p++;
 		}
 	}
@@ -135,6 +174,14 @@ void LoadOverlay(char* name)
 	touchStick.xCentre = touchCentreX;
 	touchStick.yCentre = touchCentreY;
 	touchStick.finger = 0;
+	
+	if (overlay_request == 7)
+	{
+		touchStick2.radius = sqrt(pow(touchCentreX2 - touchRadiusX2, 2.0) + pow(touchCentreY2 - touchRadiusY2, 2.0));
+		touchStick2.xCentre = touchCentreX2;
+		touchStick2.yCentre = touchCentreY2;
+		touchStick2.finger = 0;
+	}
 }
 
 void InitTouchInput()
@@ -186,6 +233,8 @@ void InitTouchInput()
 		overlays[3] = "Fullscreen";
 		overlays[4] = "Keyboard";
 		overlays[5] = "KeyboardFlip";
+		overlays[6] = "custom";
+		overlays[7] = "Dual";
 
 		LoadOverlay(overlays[overlay_request]);
 		overlay_current = overlay_request;
@@ -236,6 +285,18 @@ void InitTouchInput()
 
 	touchButtons[13].button = R_CBUTTON;
 	touchButtons[13].keyColour = SDL_Swap32(0xFFEA00FF);
+	
+	secondZed.button = Z_TRIG;
+	secondZed.keyColour = SDL_Swap32(0xBDFFFFFF);
+	secondZed.finger = 0;
+	
+	if (overlay_current == 7)
+	{
+		if (gamepadId[0][0] == '0')
+			controller[2].control->Present = 1;
+		else
+			controller[1].control->Present = 1;
+	}
 
 	printf("InitTouchInput Complete...\n");fflush(stdout);
 }
@@ -256,22 +317,9 @@ void ProcessTouchEvent(screen_event_t *event,SController* controller,unsigned sh
 	screen_get_event_property_iv(*event, SCREEN_PROPERTY_TOUCH_ID, (int*)&contactId);
 	screen_get_event_property_iv(*event, SCREEN_PROPERTY_SOURCE_POSITION, pos);
 
-	if(type == SCREEN_EVENT_MTOUCH_MOVE)
-	{
-		//DebugMessage(M64MSG_VERBOSE,  "Motion");
-		x = pos[0];
-		y = height-pos[1];
-		finger = contactId+1;//zero means inactive
-		//printf("Move: x:%d, y:%d\n", x, y);fflush(stdout);
-	}
-	else if(type == SCREEN_EVENT_MTOUCH_TOUCH || type == SCREEN_EVENT_MTOUCH_RELEASE)
-	{
-		//DebugMessage(M64MSG_VERBOSE,  "Button");
-		x = pos[0];
-		y = height-pos[1];
-		finger = contactId + 1;
-		//printf("TOUCH/RELEASE: x:%d, y:%d\n", x, y);fflush(stdout);
-	}
+	x = pos[0];
+	y = height-pos[1];
+	finger = contactId + 1;
 
 	if(x < 0){
 		x = 0;
@@ -300,12 +348,28 @@ void ProcessTouchEvent(screen_event_t *event,SController* controller,unsigned sh
 				break;
 			}
 		}
+		if (overlay_current == 7)
+		{
+			if (secondZed.finger == finger)
+				whichButton = &secondZed;
+			if (secondZed.keyColour == pixel && finger != touchStick2.finger) 
+			{
+				secondZed.finger = finger;
+				buttonHit = 1;
+			}
+		}
 
 		dist = sqrt(pow((double)x-touchStick.xCentre,2.0)+pow((double)y-touchStick.yCentre,2.0));
 
 		if(dist < touchStick.radius && touchStick.finger == 0)
 		{
 			touchStick.finger = finger;
+		}
+		else
+		{
+			dist = sqrt(pow((double)x - touchStick2.xCentre, 2.0) + pow((double)y - touchStick2.yCentre, 2.0));
+			if (overlay_current == 7 && dist < touchStick2.radius && touchStick2.finger == 0)
+				touchStick2.finger = finger;
 		}
 	}
 
@@ -316,11 +380,19 @@ void ProcessTouchEvent(screen_event_t *event,SController* controller,unsigned sh
 
 
 	//on mouseup turn stick off
-	if(type == SCREEN_EVENT_MTOUCH_RELEASE && finger == touchStick.finger)
+	if(type == SCREEN_EVENT_MTOUCH_RELEASE)
 	{
-		//DebugMessage(M64MSG_VERBOSE,  "Turned stick off");
-		touchStick.finger = 0;
-		touchStick.xPos = touchStick.yPos = 0;
+		if (finger == touchStick.finger)
+		{
+			//DebugMessage(M64MSG_VERBOSE,  "Turned stick off");
+			touchStick.finger = 0;
+			touchStick.xPos = touchStick.yPos = 0;
+		}
+		else if (overlay_current == 7 && finger == touchStick2.finger)
+		{
+			touchStick2.finger = 0;
+			touchStick2.xPos = touchStick2.yPos = 0;
+		}
 	}
 
 	//update stick position
@@ -328,6 +400,11 @@ void ProcessTouchEvent(screen_event_t *event,SController* controller,unsigned sh
 	{
 		touchStick.xPos = SDL_min(SDL_max(((x - touchStick.xCentre) / touchStick.radius),-1.0f),1.0f) * 80.0;
 		touchStick.yPos = SDL_min(SDL_max(((touchStick.yCentre - y) / touchStick.radius),-1.0f),1.0f) * 80.0;
+	}
+	else if (overlay_current == 7 && finger == touchStick2.finger)
+	{
+		touchStick2.xPos = SDL_min(SDL_max(((x - touchStick2.xCentre) / touchStick2.radius), -1.0f), 1.0f) * 80.0;
+		touchStick2.yPos = SDL_min(SDL_max(((touchStick2.yCentre - y) / touchStick2.radius), -1.0f), 1.0f) * 80.0;
 	}
 }
 
@@ -344,17 +421,24 @@ void ApplyTouchInput(SController* controller,unsigned short* button_bits)
 		if (!controller[j].control->Present || (controller[j].device != -3 && controller[j].device != -5)) {
 			continue;
 		}
+		if (overlay_current == 7)
+		{
+			if (gamepadId[0][0] == '0' && j == 2)
+				continue;
+			else if (j == 1)
+				continue;
+		}
 		if(touchStick.finger != 0) //Apply touch input
 		{
 			//printf("Apply stick...\n");
 			controller[j].buttons.X_AXIS = (int)touchStick.xPos;
 			controller[j].buttons.Y_AXIS = -(int)touchStick.yPos;
 		}
-		else //Read accelerometer input for display
+		/*else //Read accelerometer input for display
 		{
 			touchStick.xPos = controller[j].buttons.X_AXIS;
 			touchStick.yPos = controller[j].buttons.Y_AXIS;
-		}
+		}*/
 
 		int i;
 		for(i=0;i < (sizeof(touchButtons)/sizeof(touchButtons[0]));i++)
@@ -363,6 +447,34 @@ void ApplyTouchInput(SController* controller,unsigned short* button_bits)
 			{
 				//printf("Apply Button...\n");
 				controller[j].buttons.Value |= button_bits[touchButtons[i].button];
+			}
+		}
+	}
+	
+	if (overlay_current == 7)
+	{
+		if (gamepadId[0][0] == '0')
+		{
+			if (secondZed.finger != 0)
+			{
+				controller[2].buttons.Value |= button_bits[secondZed.button];
+			}
+			if (touchStick2.finger != 0)
+			{
+				controller[2].buttons.X_AXIS = (int)touchStick2.xPos;
+				controller[2].buttons.Y_AXIS = -(int)touchStick2.yPos;
+			}
+		}
+		else
+		{
+			if (secondZed.finger != 0)
+			{
+				controller[1].buttons.Value |= button_bits[secondZed.button];
+			}
+			if (touchStick2.finger != 0)
+			{
+				controller[1].buttons.X_AXIS = (int)touchStick2.xPos;
+				controller[1].buttons.Y_AXIS = -(int)touchStick2.yPos;
 			}
 		}
 	}
@@ -382,6 +494,14 @@ void DrawController()
 	stickQuad->y = UIPixelToViewportY(touchStick.yCentre - touchStick.yPos) + (stickQuad->h/2.0f);// -touchStick.yPos + (stickQuad->h/2.0f));// -(stickQuad->h/2.0f));
 
 	render_image(stickQuad);
+	
+	if (overlay_current == 7)
+	{
+		stickQuad2->x = UIPixelToViewportX(touchStick2.xCentre + touchStick2.xPos) - (stickQuad2->w/2.0f);
+		stickQuad2->y = UIPixelToViewportY(touchStick2.yCentre - touchStick2.yPos) + (stickQuad2->h/2.0f);
+		
+		render_image(stickQuad2);
+	}
 }
 
 void DrawMenu()
