@@ -42,7 +42,8 @@ typedef enum {
 	OVERLAY_NONE = 0,
 	OVERLAY_DEFAULT = 1,
 	OVERLAY_ALT = 2,
-	OVERLAY_FULL = 3
+	OVERLAY_FULL = 3,
+	OVERLAY_DUAL = 7
 }overlay_t;
 
 extern overlay_t overlay_next;
