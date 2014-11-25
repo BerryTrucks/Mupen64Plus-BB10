@@ -21,99 +21,25 @@
 # * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 # Makefile for Mupen64 HLE RSP plugin in Mupen64plus.
 
-# detect operating system
-UNAME = $(shell uname -s)
-OS := NONE
-ifeq ("$(UNAME)","Linux")
-  OS = LINUX
-  SO_EXTENSION = so
-  SHARED = -shared
-endif
-ifeq ("$(UNAME)","linux")
-  OS = LINUX
-  SO_EXTENSION = so
-  SHARED = -shared
-endif
-ifneq ("$(filter GNU hurd,$(UNAME))","")
-  OS = LINUX
-  SO_EXTENSION = so
-  SHARED = -shared
-endif
-ifeq ("$(UNAME)","Darwin")
-  OS = OSX
-  SO_EXTENSION = dylib
-  SHARED = -bundle
-endif
-ifeq ("$(UNAME)","FreeBSD")
-  OS = FREEBSD
-  SO_EXTENSION = so
-  SHARED = -shared
-endif
-ifeq ("$(UNAME)","OpenBSD")
-  OS = FREEBSD
-  SO_EXTENSION = so
-  SHARED = -shared
-  $(warning OS type "$(UNAME)" not officially supported.')
-endif
-ifneq ("$(filter GNU/kFreeBSD kfreebsd,$(UNAME))","")
-  OS = LINUX
-  SO_EXTENSION = so
-  SHARED = -shared
-endif
-ifeq ("$(OS)","NONE")
-  $(error OS type "$(UNAME)" not supported.  Please file bug report at 'http://code.google.com/p/mupen64plus/issues')
-endif
+CPU = ARM
+OS = LINUX
+SHARED = -shared
+SO_EXTENSION = so
 
-# detect system architecture
-HOST_CPU ?= $(shell uname -m)
-NO_ASM ?= 1
-CPU := NONE
-ifneq ("$(filter x86_64 amd64,$(HOST_CPU))","")
-  CPU := X86
-  ifeq ("$(BITS)", "32")
-    ARCH_DETECTED := 64BITS_32
-    PIC ?= 0
-  else
-    ARCH_DETECTED := 64BITS
-    PIC ?= 1
-  endif
-endif
-ifneq ("$(filter pentium i%86,$(HOST_CPU))","")
-  CPU := X86
-  ARCH_DETECTED := 32BITS
-  PIC ?= 0
-endif
-ifneq ("$(filter ppc macppc socppc powerpc,$(HOST_CPU))","")
-  CPU := PPC
-  ARCH_DETECTED := 32BITS
-  BIG_ENDIAN := 1
-  PIC ?= 1
-  $(warning Architecture "$(HOST_CPU)" not officially supported.')
-endif
-ifneq ("$(filter ppc64 powerpc64,$(HOST_CPU))","")
-  CPU := PPC
-  ARCH_DETECTED := 64BITS
-  BIG_ENDIAN := 1
-  PIC ?= 1
-  $(warning Architecture "$(HOST_CPU)" not officially supported.')
-endif
-ifneq ("$(filter arm%,$(HOST_CPU))","")
-  ifeq ("$(filter arm%b,$(HOST_CPU))","")
-    CPU := ARM
-    ARCH_DETECTED := 32BITS
-    PIC ?= 1
-    $(warning Architecture "$(HOST_CPU)" not officially supported.')
-  endif
-endif
-ifeq ("$(CPU)","NONE")
-  $(error CPU type "$(HOST_CPU)" not supported.  Please file bug report at 'http://code.google.com/p/mupen64plus/issues')
-endif
+# source and output dirs
+SRCDIR ?= ../../src
+OBJDIR = _obj
 
 # base CFLAGS, LDLIBS, and LDFLAGS
-OPTFLAGS ?= -O3
-CFLAGS += $(OPTFLAGS) -ffast-math -fno-strict-aliasing -fvisibility=hidden -I../../src
+OPTFLAGS ?= -O3 -mcpu=cortex-a8 -mfpu=neon -mfloat-abi=softfp
+CFLAGS += $(OPTFLAGS) -Wall -ffast-math -fno-strict-aliasing -fvisibility=hidden -I$(SRCDIR) -marm
 CXXFLAGS += -fvisibility-inlines-hidden
 LDFLAGS += $(SHARED)
+
+ifeq ("$(CPU)","ARM")
+  NO_ASM := 1
+  PIC := 1
+endif
 
 # Since we are building a shared library, we must compile with -fPIC on some architectures
 # On 32-bit x86 systems we do not want to use -fPIC because we don't have to and it has a big performance penalty on this arch
@@ -142,6 +68,11 @@ endif
 ifeq ($(OS), LINUX)
   # only export api symbols
   LDFLAGS += -Wl,-version-script,$(SRCDIR)/rsp_api_export.ver
+  ifeq ($(CPU),ARM)
+    #headers for palm, sdl
+    CFLAGS += -I../../../blackberry-SDL/include
+    LDLIBS += -L../../../mupen64plus-cascades-ui/lib -lSDL12
+  endif
 endif
 ifeq ($(OS), OSX)
   ifeq ($(CPU), X86)
@@ -150,7 +81,7 @@ ifeq ($(OS), OSX)
       LDFLAGS += -arch x86_64
     else
       CFLAGS += -pipe -mmmx -msse -fomit-frame-pointer -arch i686 -mmacosx-version-min=10.5 -isysroot /Developer/SDKs/MacOSX10.5.sdk
-      LDFLAGS += -arch i686 -read_only_relocs suppress
+      LDFLAGS += -arch i686
     endif
   endif
 endif
@@ -159,7 +90,7 @@ endif
 ifneq ("$(APIDIR)","")
   CFLAGS += "-I$(APIDIR)"
 else
-  TRYDIR = ../../../mupen64plus-core/src/api
+  TRYDIR = ../../../mupen64plus-core-richard42/src/api
   ifneq ("$(wildcard $(TRYDIR)/m64p_types.h)","")
     CFLAGS += -I$(TRYDIR)
   else
@@ -186,13 +117,13 @@ ifndef V
 endif
 endif
 
-# set base program pointers and flags
-CC       ?= gcc
-CXX      ?= g++
+#CXX := C:/bbndk/host_10_0_9_52/win32/x86/usr/bin/qcc -V4.6.3,gcc_ntoarmv7le_cpp
+CXX := J:/bbndk10.2-Gold/host_10_1_0_238/win32/x86/usr/bin/qcc -V4.6.3,gcc_ntoarmv7le_cpp
+#CXX set by IDE
 RM       ?= rm -f
 INSTALL  ?= install
 MKDIR ?= mkdir -p
-COMPILE.c = $(Q_CC)$(CC) $(CFLAGS) $(CPPFLAGS) $(TARGET_ARCH) -c
+COMPILE.c =$(Q_CC)$(CXX) $(CFLAGS) $(CPPFLAGS) $(TARGET_ARCH) -c
 COMPILE.cc = $(Q_CXX)$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(TARGET_ARCH) -c
 LINK.o = $(Q_LD)$(CXX) $(LDFLAGS) $(TARGET_ARCH)
 
@@ -215,18 +146,18 @@ ifeq ($(PLUGINDIR),)
   PLUGINDIR := $(LIBDIR)/mupen64plus
 endif
 
-SRCDIR = ../../src
-OBJDIR = _obj
-
 # list of source files to compile
-SOURCE = \
-	$(SRCDIR)/main.c \
-	$(SRCDIR)/jpeg.c \
-	$(SRCDIR)/idct.c \
-	$(SRCDIR)/ucode3.cpp \
-	$(SRCDIR)/ucode2.cpp \
-	$(SRCDIR)/ucode1.cpp \
-	$(SRCDIR)/ucode3mp3.cpp
+SOURCE =          \
+    $(SRCDIR)/alist.c       \
+    $(SRCDIR)/audio.c       \
+    $(SRCDIR)/cicx105.c     \
+    $(SRCDIR)/jpeg.c        \
+    $(SRCDIR)/main.c        \
+    $(SRCDIR)/musyx.c       \
+    $(SRCDIR)/ucode1.c      \
+    $(SRCDIR)/ucode2.c      \
+    $(SRCDIR)/ucode3.c      \
+    $(SRCDIR)/ucode3mp3.c
 
 # generate a list of object files build, make a temporary directory for them
 OBJECTS := $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(filter %.c, $(SOURCE)))
@@ -235,7 +166,7 @@ OBJDIRS = $(dir $(OBJECTS))
 $(shell $(MKDIR) $(OBJDIRS))
 
 # build targets
-TARGET = mupen64plus-rsp-hle.$(SO_EXTENSION)
+TARGET = libmupen64plus-rsp-hle.$(SO_EXTENSION)
 
 targets:
 	@echo "Mupen64Plus-rsp-hle makefile. "
@@ -257,7 +188,6 @@ targets:
 	@echo "    DESTDIR=path  == path to prepend to all installation paths (only for packagers)"
 	@echo "  Debugging Options:"
 	@echo "    DEBUG=1       == add debugging symbols"
-	@echo "    LTO=1         == enable experimental build with link-time optimization"
 	@echo "    V=1           == show verbose compiler output"
 
 all: $(TARGET)
@@ -279,11 +209,6 @@ CFLAGS += -MD
 -include $(OBJECTS:.o=.d)
 
 CXXFLAGS += $(CFLAGS)
-ifeq ($(LTO), 1)
-  CFLAGS += -flto
-  CXXFLAGS += -flto
-  LDFLAGS += -fuse-linker-plugin $(CXXFLAGS)
-endif
 
 # standard build rules
 $(OBJDIR)/%.o: $(SRCDIR)/%.c
