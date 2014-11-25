@@ -27,7 +27,7 @@ void ProcessKeyboardEvent(screen_event_t *event,SController* controller,unsigned
 	screen_get_event_property_iv(*event, SCREEN_PROPERTY_KEY_SCAN, &scan);
 	int cap = 0;
 	screen_get_event_property_iv(*event, SCREEN_PROPERTY_KEY_CAP, &cap);
-	
+		
 	SDL_keysym keysym;
 	if ((flags & KEYBOARD_TYPE_MASK)) {
 		if (!TranslateBluetoothKeyboard(sym, modifiers, flags, scan, cap, &keysym))
@@ -40,7 +40,10 @@ void ProcessKeyboardEvent(screen_event_t *event,SController* controller,unsigned
 
 	int c, b, axis_val, axis_max_val;
 
-	axis_max_val = 80;
+	if (keysym.mod & KMOD_CAPS)
+		axis_max_val = 40;
+	else
+		axis_max_val = 80;
 
 	//TODO: Re-enable walking by detecting shift and going to half max axis
 	//if (keystate[SDLK_RCTRL])
@@ -276,18 +279,22 @@ int TranslateBluetoothKeyboard(int sym, int mods, int flags, int scan, int cap, 
 	return 1;
 }
 
-void ApplyInputButtons(SController* controller,unsigned short* button_bits){
+void ApplyInputButtons(SController* controller,unsigned short* button_bits)
+{
 
 	int i, j;
-	for(j=0;j<4;++j){
-		if (!controller[j].control->Present || (controller[j].device != -2 && controller[j].device != -5))
+	for(j=0;j<4;++j)
+	{
+		if (!controller[j].control->Present || (controller[j].device != -2 && controller[j].device != -5 && controller[j].device != -4))
 			continue;
 
-		if(controller[j].device != -5 && (j == 0) && (touchStick.finger != 0)){
+		if (controller[j].device != -4 && controller[j].device != -5 && (j == 0) && (touchStick.finger != 0))
+		{
 			return;
 		}
 
-		if (controller[j].device != -5) {
+		if (controller[j].device != -5)
+		{
 			controller[j].buttons.X_AXIS = inputStick[j].x;
 			controller[j].buttons.Y_AXIS = -inputStick[j].y;
 		}
