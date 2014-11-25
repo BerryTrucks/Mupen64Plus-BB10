@@ -8,4 +8,5 @@ typedef struct {
 
 void ProcessKeyboardEvent(screen_event_t *event,SController* controller,unsigned short* button_bits);
 int TranslateBluetoothKeyboard(int sym, int mods, int flags, int scan, int cap, SDL_keysym *keysym);
+void ApplyInputButtons(SController* controller,unsigned short* button_bits);
 void InitKeyboard();
