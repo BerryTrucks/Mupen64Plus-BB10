@@ -43,9 +43,16 @@ void ProcessGamepadEvent(screen_event_t *event,SController* controller,unsigned 
 {
 	screen_device_t device;
 	screen_get_event_property_pv(*event, SCREEN_PROPERTY_DEVICE, (void**)&device);
-	screen_get_device_property_iv(device, SCREEN_PROPERTY_BUTTONS, &buttons);
+	screen_get_event_property_iv(*event, SCREEN_PROPERTY_BUTTONS, &buttons);
+	screen_get_event_property_iv(*event, SCREEN_PROPERTY_ANALOG0, analog0);
+	screen_get_event_property_iv(*event, SCREEN_PROPERTY_ANALOG1, analog1);
+	/*screen_get_device_property_iv(device, SCREEN_PROPERTY_BUTTONS, &buttons);
 	screen_get_device_property_iv(device, SCREEN_PROPERTY_ANALOG0, analog0);
-	screen_get_device_property_iv(device, SCREEN_PROPERTY_ANALOG1, analog1);
+	screen_get_device_property_iv(device, SCREEN_PROPERTY_ANALOG1, analog1);*/
+	char id[64];
+	screen_get_device_property_cv(device, SCREEN_PROPERTY_ID_STRING, sizeof(id), id);
+	//printf("Gamepad event with buttons %d\n", buttons);fflush(stdout);
+	//printf("Gamepad event with analog0 (%d, %d, %d)\n", analog0[0], analog0[1], analog0[2]);fflush(stdout);
 
 	int i;
 	for (i = GP_A_BUTTON; i < GP_NO_BUTTON; i++)
@@ -63,14 +70,19 @@ void ProcessGamepadEvent(screen_event_t *event,SController* controller,unsigned 
 		pressed[GP_EXT_BUTTON_R4] = 1;
 	else
 		pressed[GP_EXT_BUTTON_R4] = 0;
+		
+	//TODO remove me; debug
+	//int used = 0;
 	
 	int d, c, b, axis_val, axis_max_val;
 	axis_max_val = 80;
 	
 	for (c = 0; c < 4; c++)
 	{
-		if (usedDevices[c] != device)
+		if (strcmp(id, gamepadId[c]))
 			continue;
+		//used++;
+		//printf("Check user %d for controller event (has controller %s)\n", c, gamepadId[c]);
 		for (b = 0; b < 16; b++)
 		{
 			if(((int)controller[c].button[b].key) < 0)
@@ -152,10 +164,21 @@ void ProcessGamepadEvent(screen_event_t *event,SController* controller,unsigned 
 			}
 		}
 	}
+	
+	//TODO remove me; debug
+	/*if (!used)
+	{
+		printf("Control %d not used for controller %s\n", buttons, id);
+		fflush(stdout);
+	}*/
 }
 
 void initGamePad()
 {
+    if (screen_request_events(screen_cxt) != BPS_SUCCESS)
+    {
+        printf("Error getting screen events in mupen64plus-intput-bb gamepad\n");fflush(stdout);
+    }
 	usedDevices[0] = 0;
 	usedDevices[1] = 0;
 	usedDevices[2] = 0;
@@ -167,7 +190,7 @@ void initGamePad()
 	analog1[0] = 0;
 	analog1[1] = 0;
 	analog1[2] = 0;
-	int deviceCount;
+	/*int deviceCount;
 	screen_get_context_property_iv(screen_cxt, SCREEN_PROPERTY_DEVICE_COUNT, &deviceCount);
 	fprintf(stderr, "Initializing %d Gamepads\n", deviceCount);
 	if (deviceCount > 0)
@@ -201,5 +224,5 @@ void initGamePad()
 		}
 
 		free(devices);
-	}
+	}*/
 }
