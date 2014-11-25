@@ -337,7 +337,7 @@ static bool StartVideo(void)
         CDeviceBuilder::GetBuilder()->CreateGraphicsContext();
         CGraphicsContext::InitWindowInfo();
 
-        bool res = CGraphicsContext::Get()->Initialize(640, 480, !windowSetting.bDisplayFullscreen);
+        bool res = CGraphicsContext::Get()->Initialize(1280, 768, !windowSetting.bDisplayFullscreen);
         if (!res)
         {
             g_CritialSection.Unlock();

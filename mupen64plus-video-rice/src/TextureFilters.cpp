@@ -30,17 +30,20 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "liblinux/BMGLibPNG.h"
 #include "liblinux/BMGDLL.h"
+#include <sys/types.h>
+
+#ifdef max
+#undef max
+#endif
+#ifdef min
+#undef min
+#endif
+
+#include <algorithm>
 
 #ifdef min
 #undef min
 #endif
-#ifdef max
-#undef max
-#endif
-
-#include <sys/types.h>
-#include <algorithm>
-
 
 /************************************************************************/
 /* 2X filters                                                           */

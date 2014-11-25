@@ -30,7 +30,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "TextureManager.h"
 
 #ifdef ANDROID_EDITION
-#include "ae_imports.h"
+#include "ae_bridge.h"
 static int hardwareType = HARDWARE_TYPE_UNKNOWN;
 #endif
 
@@ -353,9 +353,6 @@ void OGLRender::ApplyZBias(int bias)
 
 #ifdef ANDROID_EDITION
     Android_JNI_GetPolygonOffset(hardwareType, bias, &f1, &f2);
-#elif __QNXNTO__
-	f1 = bias > 0 ? -0.2f : 0.0f;
-	f2 = bias > 0 ? -0.2f : 0.0f;
 #endif
 
     if (bias > 0)

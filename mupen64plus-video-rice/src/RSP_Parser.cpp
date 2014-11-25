@@ -28,9 +28,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "ucode.h"
 #include <time.h>
 
-#ifdef __QNXNTO__
 using namespace std;
-#endif
 
 //////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////

@@ -28,11 +28,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "liblinux/BMGLibPNG.h"
 
-#ifdef min
-#undef min
-#endif
 #ifdef max
 #undef max
+#endif
+#ifdef min
+#undef min
 #endif
 
 #include <algorithm>
@@ -47,6 +47,13 @@ extern char* right (const char * src, int nchars);
 
 #if defined(WIN32)
   #define strcasecmp _stricmp
+#endif
+
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
 #endif
 
 //========================================================================

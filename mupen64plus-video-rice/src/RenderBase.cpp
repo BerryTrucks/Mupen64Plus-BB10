@@ -39,9 +39,7 @@ extern FiddledVtx * g_pVtxBase;
 
 #ifdef ENABLE_CLIP_TRI
 
-#ifdef __QNXNTO__
 using namespace std;
-#endif
 
 inline void RSP_Vtx_Clipping(int i)
 {

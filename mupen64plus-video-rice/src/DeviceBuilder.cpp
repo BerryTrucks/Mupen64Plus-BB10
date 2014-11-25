@@ -23,12 +23,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "FrameBuffer.h"
 #include "OGLCombiner.h"
 #include "OGLDebug.h"
-#ifdef min
-#undef min
-#endif
-#ifdef max
-#undef max
-#endif
 #include "OGLExtRender.h"
 #include "OGLGraphicsContext.h"
 #include "OGLTexture.h"
@@ -38,6 +32,14 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "OGLExtensions.h"
 #include "OGLFragmentShaders.h"
 #elif SDL_VIDEO_OPENGL_ES2
+
+#ifdef max
+#undef max
+#endif
+#ifdef min
+#undef min
+#endif
+
 #include "OGLES2FragmentShaders.h"
 #endif
 

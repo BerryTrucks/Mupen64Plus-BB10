@@ -26,15 +26,13 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "RenderBase.h"
 #include "TextureManager.h"
 
+using namespace std;
+
 CTextureManager gTextureManager;
 
 unsigned int g_maxTextureMemUsage = (5*1024*1024);
 unsigned int g_amountToFree = (512*1024);
 bool g_bUseSetTextureMem = false;
-
-#ifdef __QNXNTO__
-using namespace std;
-#endif
 
 // Returns the first prime greater than or equal to nFirst
 inline int GetNextPrime(int nFirst)

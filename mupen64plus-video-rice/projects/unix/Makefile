@@ -26,7 +26,7 @@ OS = LINUX
 SO_EXTENSION = so
 
 # source and output dirs
-SRCDIR ?= .
+SRCDIR ?= ../../src
 OBJDIR = _obj
 
 # base CFLAGS, LDLIBS, and LDFLAGS
@@ -70,10 +70,10 @@ ifeq ($(OS), LINUX)
   LDFLAGS += -Wl,-version-script,$(SRCDIR)/video_api_export.ver
   ifeq ($(CPU),ARM)
     #headers for palm, sdl, libpng
-    CFLAGS += -I../blackberry-SDL/include -IC:\bbndk\target_10_0_9_1673\qnx6\usr\include\freetype2
+    CFLAGS += -I../../../blackberry-SDL/include -I../../../bbutil -IJ:\bbndk10.2-Gold\target_10_1_0_4828\qnx6\usr\include\freetype2
     #todo add libpng header dir
-    CFLAGS += -DGLES_2 -DPRE
-    LDLIBS += -L../mupen64plus-cascades-ui/lib/ -lGLESv2 -lpng -lSDL12 -lbbutil
+    CFLAGS += -DANDROID -DANDROID_EDITION -DNO_ASM -fsigned-char -mfpu=vfp -mfloat-abi=softfp
+    LDLIBS += -L../../../mupen64plus-cascades-ui/lib/ -lGLESv2 -lpng -lSDL12 -lbbutil
   endif
 endif
 ifeq ($(OS), OSX)
@@ -94,7 +94,7 @@ endif
 ifneq ("$(APIDIR)","")
   CFLAGS += "-I$(APIDIR)"
 else
-  TRYDIR = ../mupen64plus-core-richard42/api
+  TRYDIR = ../../../mupen64plus-core-richard42/src/api
   ifneq ("$(wildcard $(TRYDIR)/m64p_types.h)","")
     CFLAGS += -I$(TRYDIR)
   else
@@ -112,7 +112,6 @@ else
   endif
 endif
 
-#CXX := C:/bbndk-2.1.0-beta1/host/win32/x86/usr/bin/qcc -V4.4.2,gcc_ntoarmv7le_cpp
 CXX := J:/bbndk10.2-Gold/host_10_1_0_238/win32/x86/usr/bin/qcc -V4.6.3,gcc_ntoarmv7le_cpp
 RM       ?= rm -f
 INSTALL  ?= install
@@ -147,49 +146,49 @@ ifeq ($(PLUGINDIR),)
 endif
 
 # list of source files to compile
-SOURCE = \
-	$(SRCDIR)/Blender.cpp \
-	$(SRCDIR)/Combiner.cpp \
-	$(SRCDIR)/CombinerTable.cpp \
-	$(SRCDIR)/Config.cpp \
-	$(SRCDIR)/ConvertImage.cpp \
-	$(SRCDIR)/ConvertImage16.cpp \
-	$(SRCDIR)/Debugger.cpp \
-	$(SRCDIR)/DecodedMux.cpp \
-	$(SRCDIR)/DeviceBuilder.cpp \
-	$(SRCDIR)/DirectXDecodedMux.cpp \
-	$(SRCDIR)/FrameBuffer.cpp \
-	$(SRCDIR)/GeneralCombiner.cpp \
-	$(SRCDIR)/GraphicsContext.cpp \
-	$(SRCDIR)/OGLCombiner.cpp \
-	$(SRCDIR)/OGLDecodedMux.cpp \
-	$(SRCDIR)/OGLExtCombiner.cpp \
-	$(SRCDIR)/OGLExtRender.cpp \
+SOURCE =                      \
+    $(SRCDIR)/Blender.cpp               \
+    $(SRCDIR)/Combiner.cpp              \
+    $(SRCDIR)/CombinerTable.cpp         \
+    $(SRCDIR)/Config.cpp                \
+    $(SRCDIR)/ConvertImage.cpp          \
+    $(SRCDIR)/ConvertImage16.cpp        \
+    $(SRCDIR)/Debugger.cpp              \
+    $(SRCDIR)/DecodedMux.cpp            \
+    $(SRCDIR)/DeviceBuilder.cpp         \
+    $(SRCDIR)/DirectXDecodedMux.cpp     \
+    $(SRCDIR)/FrameBuffer.cpp           \
+    $(SRCDIR)/GeneralCombiner.cpp       \
+    $(SRCDIR)/GraphicsContext.cpp       \
+    $(SRCDIR)/OGLCombiner.cpp           \
+    $(SRCDIR)/OGLDecodedMux.cpp         \
+    $(SRCDIR)/OGLExtCombiner.cpp        \
+    $(SRCDIR)/OGLExtRender.cpp          \
     $(SRCDIR)/OGLES2FragmentShaders.cpp \
-	$(SRCDIR)/OGLGraphicsContext.cpp \
-	$(SRCDIR)/OGLRender.cpp \
-	$(SRCDIR)/OGLRenderExt.cpp \
-	$(SRCDIR)/OGLTexture.cpp \
-	$(SRCDIR)/Render.cpp \
-	$(SRCDIR)/RenderBase.cpp \
-	$(SRCDIR)/RenderExt.cpp \
-	$(SRCDIR)/RenderTexture.cpp \
-	$(SRCDIR)/RSP_Parser.cpp \
-	$(SRCDIR)/RSP_S2DEX.cpp \
-	$(SRCDIR)/Texture.cpp \
-	$(SRCDIR)/TextureFilters.cpp \
-	$(SRCDIR)/TextureFilters_2xsai.cpp \
-	$(SRCDIR)/TextureFilters_hq2x.cpp \
-	$(SRCDIR)/TextureFilters_hq4x.cpp \
-	$(SRCDIR)/TextureManager.cpp \
-	$(SRCDIR)/VectorMath.cpp \
-	$(SRCDIR)/Video.cpp \
-	$(SRCDIR)/osal_dynamiclib_unix.c \
-	$(SRCDIR)/osal_files_unix.c \
-	$(SRCDIR)/liblinux/BMGImage.c \
-	$(SRCDIR)/liblinux/BMGUtils.cpp \
-	$(SRCDIR)/liblinux/bmp.c \
-	$(SRCDIR)/liblinux/pngrw.c
+    $(SRCDIR)/OGLGraphicsContext.cpp    \
+    $(SRCDIR)/OGLRender.cpp             \
+    $(SRCDIR)/OGLRenderExt.cpp          \
+    $(SRCDIR)/OGLTexture.cpp            \
+    $(SRCDIR)/Render.cpp                \
+    $(SRCDIR)/RenderBase.cpp            \
+    $(SRCDIR)/RenderExt.cpp             \
+    $(SRCDIR)/RenderTexture.cpp         \
+    $(SRCDIR)/RSP_Parser.cpp            \
+    $(SRCDIR)/RSP_S2DEX.cpp             \
+    $(SRCDIR)/Texture.cpp               \
+    $(SRCDIR)/TextureFilters.cpp        \
+    $(SRCDIR)/TextureFilters_2xsai.cpp  \
+    $(SRCDIR)/TextureFilters_hq2x.cpp   \
+    $(SRCDIR)/TextureFilters_hq4x.cpp   \
+    $(SRCDIR)/TextureManager.cpp        \
+    $(SRCDIR)/VectorMath.cpp            \
+    $(SRCDIR)/Video.cpp                 \
+    $(SRCDIR)/osal_dynamiclib_unix.c    \
+    $(SRCDIR)/osal_files_unix.c         \
+    $(SRCDIR)/liblinux/BMGImage.c       \
+    $(SRCDIR)/liblinux/BMGUtils.c       \
+    $(SRCDIR)/liblinux/bmp.c            \
+    $(SRCDIR)/liblinux/pngrw.c
 
 # generate a list of object files build, make a temporary directory for them
 OBJECTS := $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(filter %.c, $(SOURCE)))
@@ -198,7 +197,7 @@ OBJDIRS = $(dir $(OBJECTS))
 $(shell $(MKDIR) $(OBJDIRS))
 
 # build targets
-TARGET = ../mupen64plus-cascades-ui/lib/libmupen64plus-video-rice.$(SO_EXTENSION)
+TARGET = libmupen64plus-video-rice.$(SO_EXTENSION)
 
 targets:
 	@echo "Mupen64plus-video-rice N64 Graphics plugin makefile. "
