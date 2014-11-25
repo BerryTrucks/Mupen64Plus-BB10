@@ -27,7 +27,7 @@ SHARED = -shared
 SO_EXTENSION = so
 
 # source and output dirs
-SRCDIR ?= .
+SRCDIR := ../../src
 OBJDIR = _obj
 
 # base CFLAGS, LDLIBS, and LDFLAGS
@@ -71,17 +71,18 @@ ifeq ($(OS), FREEBSD)
   LDLIBS += -L${LOCALBASE}/lib -lc
 endif
 ifeq ($(OS), LINUX)
-  TARGET = ../mupen64plus-cascades-ui/lib/libmupen64plus.so.2
+  TARGET = libmupen64plus.so.2
   SONAME = libmupen64plus.so.2
   LDFLAGS += -shared
   #LDLIBS += -ldl
   ifeq ($(CPU),ARM)
     #headers for palm, sdl, libpng
     #CFLAGS += -I/opt/PalmPDK/include
-    CFLAGS += -I../blackberry-SDL/include
-    CFLAGS += -DNEW_DYNAREC=3 -D_GNU_SOURCE -DDYNAREC -D__arm__ 
+    CFLAGS += -I../../../blackberry-SDL/include -I../../../bbutil
+    CFLAGS += -D_GNU_SOURCE -D__arm__ -DANDROID -DANDROID_EDITION
+#	-DIOAPI_NO_64 -DNOCRYPT -DNOUNCRYPT
 	#-D_PROFILE
-    LDLIBS += -L../mupen64plus-cascades-ui/lib/ -lbbutil
+    LDLIBS += -L../../../mupen64plus-cascades-ui/lib/ -lbbutil
     #LDFLAGS += -allow-shlib-undefined
   endif
 endif
@@ -225,49 +226,53 @@ ifeq ($(INCDIR),)
 endif
 
 # list of required source files for compilation
-SOURCE = \
-	$(SRCDIR)/api/callbacks.c \
-	$(SRCDIR)/api/common.c \
-	$(SRCDIR)/api/config.c \
-	$(SRCDIR)/api/debugger.c \
-	$(SRCDIR)/api/frontend.c \
-	$(SRCDIR)/api/vidext.c \
-	$(SRCDIR)/main/cheat.c \
-	$(SRCDIR)/main/eventloop.c \
-	$(SRCDIR)/main/main.c \
-	$(SRCDIR)/main/md5.c \
-	$(SRCDIR)/main/rom.c \
-	$(SRCDIR)/main/savestates.c \
-    $(SRCDIR)/main/sdl_key_converter.c \
-	$(SRCDIR)/main/util.c \
-	$(SRCDIR)/main/zip/ioapi.c \
-	$(SRCDIR)/main/zip/unzip.c \
-	$(SRCDIR)/main/zip/zip.c \
-	$(SRCDIR)/memory/dma.c \
-	$(SRCDIR)/memory/flashram.c \
-	$(SRCDIR)/memory/memory.c \
-	$(SRCDIR)/memory/n64_cic_nus_6105.c \
-	$(SRCDIR)/memory/pif.c \
-	$(SRCDIR)/memory/tlb.c \
-	$(SRCDIR)/osal/dynamiclib_unix.c \
-	$(SRCDIR)/osal/files_unix.c \
-    $(SRCDIR)/osd/screenshot.cpp \
-	$(SRCDIR)/plugin/dummy_audio.c \
-	$(SRCDIR)/plugin/dummy_input.c \
-	$(SRCDIR)/plugin/dummy_rsp.c \
-	$(SRCDIR)/plugin/dummy_video.c \
-	$(SRCDIR)/plugin/plugin.c \
-	$(SRCDIR)/r4300/empty_dynarec.c \
-	$(SRCDIR)/r4300/exception.c \
-	$(SRCDIR)/r4300/interupt.c \
-	$(SRCDIR)/r4300/profile.c \
-	$(SRCDIR)/r4300/pure_interp.c \
-	$(SRCDIR)/r4300/r4300.c \
-	$(SRCDIR)/r4300/recomp.c \
-	$(SRCDIR)/r4300/reset.c \
-	$(SRCDIR)/r4300/new_dynarec/linkage_arm.S \
-	$(SRCDIR)/r4300/new_dynarec/new_dynarec.c
+SOURCE =                              \
+    $(SRCDIR)/api/callbacks.c                   \
+    $(SRCDIR)/api/common.c                      \
+    $(SRCDIR)/api/config.c                      \
+    $(SRCDIR)/api/debugger.c                    \
+    $(SRCDIR)/api/frontend.c                    \
+    $(SRCDIR)/api/vidext.c                      \
+    $(SRCDIR)/main/cheat.c                      \
+    $(SRCDIR)/main/eventloop.c                  \
+    $(SRCDIR)/main/main.c                       \
+    $(SRCDIR)/main/md5.c                        \
+    $(SRCDIR)/main/rom.c                        \
+    $(SRCDIR)/main/savestates.c                 \
+    $(SRCDIR)/main/sdl_key_converter.c          \
+    $(SRCDIR)/main/util.c                       \
+    $(SRCDIR)/main/zip/ioapi.c                  \
+    $(SRCDIR)/main/zip/unzip.c                  \
+    $(SRCDIR)/main/zip/zip.c                    \
+    $(SRCDIR)/memory/dma.c                      \
+    $(SRCDIR)/memory/flashram.c                 \
+    $(SRCDIR)/memory/memory.c                   \
+    $(SRCDIR)/memory/n64_cic_nus_6105.c         \
+    $(SRCDIR)/memory/pif.c                      \
+    $(SRCDIR)/memory/tlb.c                      \
+    $(SRCDIR)/osal/dynamiclib_unix.c            \
+    $(SRCDIR)/osal/files_unix.c                 \
+    $(SRCDIR)/osd/screenshot.cpp                \
+    $(SRCDIR)/plugin/dummy_audio.c              \
+    $(SRCDIR)/plugin/dummy_input.c              \
+    $(SRCDIR)/plugin/dummy_rsp.c                \
+    $(SRCDIR)/plugin/dummy_video.c              \
+    $(SRCDIR)/plugin/plugin.c                   \
+    $(SRCDIR)/r4300/empty_dynarec.c             \
+    $(SRCDIR)/r4300/exception.c                 \
+    $(SRCDIR)/r4300/interupt.c                  \
+    $(SRCDIR)/r4300/profile.c                   \
+    $(SRCDIR)/r4300/pure_interp.c               \
+    $(SRCDIR)/r4300/r4300.c                     \
+    $(SRCDIR)/r4300/recomp.c                    \
+    $(SRCDIR)/r4300/reset.c                     \
+    $(SRCDIR)/r4300/new_dynarec/new_dynarec.c
 
+ifeq ($(CPU),ARM)
+	SOURCE += $(SRCDIR)/r4300/new_dynarec/linkage_arm.S
+    CFLAGS += -DDYNAREC
+    CFLAGS += -DNEW_DYNAREC=3
+endif
 
 ifeq ($(DEBUGGER), 1)
   SOURCE += \

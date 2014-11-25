@@ -49,11 +49,6 @@
 #error Unsupported dynarec architecture
 #endif
 
-#ifdef __QNX__
-#undef __clear_cache
-#define __clear_cache(start,end) msync(start, (size_t)((void*)end - (void*)start), MS_SYNC | MS_CACHE_ONLY | MS_INVALIDATE_ICACHE);
-#endif
-
 #define MAXBLOCK 4096
 #define MAX_OUTPUT_BLOCK_SIZE 262144
 #define CLOCK_DIVIDER count_per_op
@@ -222,7 +217,11 @@ extern int cycle_count;
 
 /* bug-fix to implement __clear_cache (missing in Android; http://code.google.com/p/android/issues/detail?id=1803) */
 void __clear_cache_bugfix(char* begin, char *end);
-#ifdef ANDROID
+
+#ifdef __QNX__
+#undef __clear_cache
+#define __clear_cache(start,end) msync(start, (size_t)((void*)end - (void*)start), MS_SYNC | MS_CACHE_ONLY | MS_INVALIDATE_ICACHE);
+#elif defined(ANDROID)
 	#define __clear_cache __clear_cache_bugfix
 #endif
 

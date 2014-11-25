@@ -205,6 +205,7 @@ void cheat_apply_cheats(int entry)
 
     // If game is Zelda OOT, apply subscreen delay fix
     if (entry == ENTRY_VI && strncmp((char *)ROM_HEADER.Name, "THE LEGEND OF ZELDA", 19) == 0) {
+        printf("Applying Zelda Subscreen hack\n");
         uint32_t subscreen_address = 0;
         uint32_t credits_address[4];
         credits_address[0] = 0;
