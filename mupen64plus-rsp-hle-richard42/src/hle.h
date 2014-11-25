@@ -62,15 +62,6 @@ enum {
     TASK_YIELD_DATA_SIZE    = 0xffc
 };
 
-#ifdef __QNXNTO__
-#ifndef INT16_MIN
-#define INT16_MIN               (-0x7fff-1)
-#endif
-#ifndef INT16_MAX
-#define INT16_MAX               (0x7fff)
-#endif
-#endif
-
 static inline int16_t clamp_s16(int_fast32_t x)
 {
     x = (x < INT16_MIN) ? INT16_MIN: x;
