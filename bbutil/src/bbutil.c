@@ -80,6 +80,7 @@ int initialized_n64 = 0;
 UIQuad* overlayKey = NULL;
 UIQuad* overlayQuad = NULL;
 UIQuad* stickQuad = NULL;
+UIQuad* stickQuad2 = NULL;
 UIQuad* osd_save = NULL;
 UIQuad* osd_load = NULL;
 float save = 0.0f, load = 0.0f;
@@ -130,7 +131,35 @@ bbutil_egl_perror(const char *msg) {
     fprintf(stderr, "%s: %s\n", msg, errmsg[message_index]);
 }
 
+bool egl_letterbox = false;
+bool egl_pillarbox = false;
+int egl_bottom, egl_left, egl_width, egl_height;
+
 void PB_eglSwapBuffers() {
+    if (egl_letterbox)
+    {
+        glEnable(GL_SCISSOR_TEST);
+        float scissor[4];
+        glGetFloatv(GL_SCISSOR_BOX, scissor);
+        glClearColor(0, 0, 0, 1.0);
+        glScissor(0, 0, egl_width, egl_height);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(0, egl_bottom, egl_width, egl_height);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(scissor[0], scissor[1], scissor[2], scissor[3]);
+    }
+    else if (egl_pillarbox)
+    {
+        glEnable(GL_SCISSOR_TEST);
+        float scissor[4];
+        glGetFloatv(GL_SCISSOR_BOX, scissor);
+        glClearColor(0, 0, 0, 1.0);
+        glScissor(0, 0, egl_width, egl_height);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(egl_left, 0, egl_width, egl_height);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(scissor[0], scissor[1], scissor[2], scissor[3]);
+    }
     /*if (margin_left || margin_bottom)
     {
         glEnable(GL_SCISSOR_TEST);
@@ -326,6 +355,32 @@ bbutil_init_egl(screen_context_t ctx, char *groupId, char *windowId) {
         bbutil_terminate();
         return EXIT_FAILURE;
     }
+
+    /*EGLint numConfigOut[1];
+    eglChooseConfig(egl_disp, attrib_list, NULL, 0, numConfigOut);
+    EGLConfig* configs = malloc(numConfigOut[0] * sizeof(EGLConfig));
+    eglChooseConfig(egl_disp, attrib_list, configs, numConfigOut[0], NULL);
+    int k = 0;
+    for (; k < numConfigOut[0]; k++)
+    {
+        EGLint value;
+        printf("egl-config>");
+        eglGetConfigAttrib(egl_disp, configs[k], EGL_CONFIG_CAVEAT, &value);
+        printf(" caveat -> %d", value);
+        eglGetConfigAttrib(egl_disp, configs[k], EGL_RED_SIZE, &value);
+        printf(", pallette -> (%d", value);
+        eglGetConfigAttrib(egl_disp, configs[k], EGL_GREEN_SIZE, &value);
+        printf(" %d", value);
+        eglGetConfigAttrib(egl_disp, configs[k], EGL_BLUE_SIZE, &value);
+        printf(" %d", value);
+        eglGetConfigAttrib(egl_disp, configs[k], EGL_ALPHA_SIZE, &value);
+        printf(" %d),", value);
+        eglGetConfigAttrib(egl_disp, configs[k], EGL_DEPTH_SIZE, &value);
+        printf(" depth -> %d,", value);
+        eglGetConfigAttrib(egl_disp, configs[k], EGL_BUFFER_SIZE, &value);
+        printf(" buffer -> %d\n", value);
+    }
+    free(configs);*/
 
     if(!eglChooseConfig(egl_disp, attrib_list, &egl_conf, 1, &num_configs))
     {

@@ -75,6 +75,12 @@ extern bool use_overlay;
 extern bool dbg_fps;
 extern int q10_rotate;
 extern bool use_gamepad;
+extern bool egl_letterbox;
+extern bool egl_pillarbox;
+extern int egl_bottom;
+extern int egl_left;
+extern int egl_width;
+extern int egl_height;
 
 typedef struct
 {
@@ -93,6 +99,7 @@ typedef struct
 extern UIQuad* overlayKey;
 extern UIQuad* overlayQuad;
 extern UIQuad* stickQuad;
+extern UIQuad* stickQuad2;
 extern UIQuad* osd_save;
 extern UIQuad* osd_load;
 
