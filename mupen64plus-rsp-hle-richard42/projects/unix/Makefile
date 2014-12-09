@@ -71,7 +71,7 @@ ifeq ($(OS), LINUX)
   ifeq ($(CPU),ARM)
     #headers for palm, sdl
     CFLAGS += -I../../../blackberry-SDL/include
-    LDLIBS += -L../../../mupen64plus-cascades-ui/lib -lSDL12
+    LDLIBS += -L../../../libs -lSDL12
   endif
 endif
 ifeq ($(OS), OSX)
@@ -147,17 +147,19 @@ ifeq ($(PLUGINDIR),)
 endif
 
 # list of source files to compile
-SOURCE =          \
-    $(SRCDIR)/alist.c       \
-    $(SRCDIR)/audio.c       \
-    $(SRCDIR)/cicx105.c     \
-    $(SRCDIR)/jpeg.c        \
-    $(SRCDIR)/main.c        \
-    $(SRCDIR)/musyx.c       \
-    $(SRCDIR)/ucode1.c      \
-    $(SRCDIR)/ucode2.c      \
-    $(SRCDIR)/ucode3.c      \
-    $(SRCDIR)/ucode3mp3.c
+SOURCE =           \
+    $(SRCDIR)/alist.c        \
+    $(SRCDIR)/alist_audio.c  \
+    $(SRCDIR)/alist_naudio.c \
+    $(SRCDIR)/alist_nead.c   \
+    $(SRCDIR)/audio.c        \
+    $(SRCDIR)/cicx105.c      \
+    $(SRCDIR)/hle.c          \
+    $(SRCDIR)/jpeg.c         \
+    $(SRCDIR)/memory.c       \
+    $(SRCDIR)/mp3.c          \
+    $(SRCDIR)/musyx.c        \
+    $(SRCDIR)/plugin.c
 
 # generate a list of object files build, make a temporary directory for them
 OBJECTS := $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(filter %.c, $(SOURCE)))
@@ -166,7 +168,7 @@ OBJDIRS = $(dir $(OBJECTS))
 $(shell $(MKDIR) $(OBJDIRS))
 
 # build targets
-TARGET = libmupen64plus-rsp-hle.$(SO_EXTENSION)
+TARGET = ../../../libs/libmupen64plus-rsp-hle.$(SO_EXTENSION)
 
 targets:
 	@echo "Mupen64Plus-rsp-hle makefile. "
