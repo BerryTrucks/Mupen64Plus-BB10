@@ -72,8 +72,8 @@ ifeq ($(OS), LINUX)
     #headers for palm, sdl, libpng
     CFLAGS += -I../../../blackberry-SDL/include -I../../../bbutil -IJ:\bbndk10.2-Gold\target_10_1_0_4828\qnx6\usr\include\freetype2
     #todo add libpng header dir
-    CFLAGS += -DANDROID -DANDROID_EDITION -DNO_ASM -fsigned-char -mfpu=vfp -mfloat-abi=softfp
-    LDLIBS += -L../../../mupen64plus-cascades-ui/lib/ -lGLESv2 -lpng -lSDL12 -lbbutil
+    CFLAGS += -fsigned-char -mfpu=vfp -mfloat-abi=softfp -DANDROID -DANDROID_EDITION -DNO_ASM -DUSE_GLES=1
+    LDLIBS += -L../../../libs/ -lGLESv2 -lpng -lSDL12 -lbbutil
   endif
 endif
 ifeq ($(OS), OSX)
@@ -197,7 +197,7 @@ OBJDIRS = $(dir $(OBJECTS))
 $(shell $(MKDIR) $(OBJDIRS))
 
 # build targets
-TARGET = libmupen64plus-video-rice.$(SO_EXTENSION)
+TARGET = ../../../libs/libmupen64plus-video-rice.$(SO_EXTENSION)
 
 targets:
 	@echo "Mupen64plus-video-rice N64 Graphics plugin makefile. "
