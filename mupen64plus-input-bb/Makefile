@@ -99,7 +99,7 @@ endif
 ifneq ("$(APIDIR)","")
   CFLAGS += "-I$(APIDIR)"
 else
-  TRYDIR = ../mupen64plus-core-richard42/api
+  TRYDIR = ../mupen64plus-core-richard42/src/api
   ifneq ("$(wildcard $(TRYDIR)/m64p_types.h)","")
     CFLAGS += -I$(TRYDIR)
   else
@@ -149,7 +149,7 @@ CFLAGS += -MD
 -include $(OBJECTS:.o=.d)
 
 # build targets
-TARGET = ../mupen64plus-cascades-ui/lib/libmupen64plus-input-bb.$(SO_EXTENSION)
+TARGET = ../libs/libmupen64plus-input-bb.$(SO_EXTENSION)
 
 targets:
 	@echo "Mupen64Plus-input-sdl makefile. "
