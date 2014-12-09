@@ -81,6 +81,8 @@ extern int egl_bottom;
 extern int egl_left;
 extern int egl_width;
 extern int egl_height;
+extern bool egl_capture;
+extern bool m64p_emit_touch;
 
 typedef struct
 {
@@ -105,6 +107,12 @@ extern UIQuad* osd_load;
 
 typedef void (*m64p_touch_overlay_callback)(void);
 extern m64p_touch_overlay_callback touch_overlay_callback;
+
+typedef void (*m64p_capture_callback)(int, unsigned char *, int);
+extern m64p_capture_callback capture_callback;
+
+typedef void (*m64p_touch_callback)(void);
+extern m64p_touch_callback touch_callback;
 
 #ifdef __cplusplus
 extern "C" {
@@ -209,6 +217,8 @@ int bbutil_screencapture(const char* filename, int x, int y, int width, int heig
  */
 
 void PB_eglSwapBuffers();
+
+void begin_capture();
 
 float UIPixelToViewportX(float x);
 float UIPixelToViewportY(float y);

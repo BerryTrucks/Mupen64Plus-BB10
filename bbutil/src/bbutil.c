@@ -96,8 +96,13 @@ bool use_overlay = false;
 bool dbg_fps = false;
 int q10_rotate = 0;
 bool use_gamepad = false;
+bool egl_capture = false;
+int capture_count = -1;
+bool m64p_emit_touch = false;
 
 m64p_touch_overlay_callback touch_overlay_callback = 0;
+m64p_capture_callback capture_callback = 0;
+m64p_touch_callback touch_callback = 0;
 
 uint margin_bottom = 0;
 uint margin_left = 0;
@@ -129,6 +134,11 @@ bbutil_egl_perror(const char *msg) {
         message_index = 15;
 
     fprintf(stderr, "%s: %s\n", msg, errmsg[message_index]);
+}
+
+void begin_capture()
+{
+    egl_capture = true;
 }
 
 bool egl_letterbox = false;
@@ -187,16 +197,43 @@ void PB_eglSwapBuffers() {
         glClear(GL_COLOR_BUFFER_BIT);
         if (currentScissor)
             glEnable(GL_SCISSOR_TEST);
-    }
-    if (touch_overlay_callback)
-        (*touch_overlay_callback)();
-    if (use_overlay)
-    {
+        if (touch_overlay_callback)
+            (*touch_overlay_callback)();
         eglSwapBuffers(egl_disp, egl_surf_overlay);
         eglMakeCurrent(egl_disp, egl_surf, egl_surf, egl_ctx);
     }
     else
-        eglSwapBuffers(egl_disp, egl_surf);
+    {
+        if (egl_capture)
+        {
+            if (capture_count == -1)
+                capture_count = 200;
+            else if (capture_count == 0)
+                egl_capture = false;
+            if (capture_count % 10 == 0)
+            {
+                eglSwapBuffers(egl_disp, egl_surf);
+                int size = DISPLAY_WIDTH * DISPLAY_HEIGHT * 4;
+                unsigned char *pucFrame = (unsigned char *) malloc(size);
+                glReadPixels(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, pucFrame);
+                (*capture_callback)(capture_count, pucFrame, size);
+                free(pucFrame);
+            }
+            else
+            {
+                if (touch_overlay_callback)
+                    (*touch_overlay_callback)();
+                eglSwapBuffers(egl_disp, egl_surf);
+            }
+            capture_count--;
+        }
+        else
+        {
+            if (touch_overlay_callback)
+                (*touch_overlay_callback)();
+            eglSwapBuffers(egl_disp, egl_surf);
+        }
+    }
 }
 
 /**
@@ -250,11 +287,13 @@ int bbutil_offset_menu(int offset)
 	if (offset > 0)
 	{
 		menuOpen = 1;
+		m64p_emit_touch = 1;
 		bbutil_defocus();
 	}
 	else
 	{
 		menuOpen = 0;
+		m64p_emit_touch = 0;
 		bbutil_focus();
 	}
 	return 0;
