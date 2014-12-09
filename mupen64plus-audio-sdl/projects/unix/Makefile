@@ -41,10 +41,10 @@ LDFLAGS += $(SHARED)
 CFLAGS += -fPIC
 LDFLAGS += -fPIC
 
-CFLAGS  += -I../blackberry-SDL/include -DUSE_SRC
-LDLIBS += -L../blackberry-SDL/Device-Debug -lSDL12
+CFLAGS  += -I../../../blackberry-SDL/include -DUSE_SRC -DANDROID_EDITION
+LDLIBS += -L../../../libs -lSDL12
 
-CFLAGS  += -I..//mupen64plus-core-richard42/api
+CFLAGS  += -I../../../mupen64plus-core-richard42/src/api
 
 # set base program pointers and flags
 #CC_OVERRIDE = C:/bbndk/host_10_0_9_52/win32/x86/usr/bin/qcc -V4.6.3,gcc_ntoarmv7le_cpp -w1 -shared
@@ -72,7 +72,7 @@ SOURCE = \
 
 # generate a list of object files build, make a temporary directory for them
 #OBJDIRS = _obj
-OBJDIRS = .
+OBJDIRS = ../../src
 $(shell $(MKDIR) $(OBJDIRS))
 OBJECTS := $(OBJDIRS)/main.o $(OBJDIRS)/volume.o $(OBJDIRS)/osal_dynamiclib_unix.o $(OBJDIRS)/samplerate.o $(OBJDIRS)/src_linear.o $(OBJDIRS)/src_sinc.o $(OBJDIRS)/src_zoh.o
 
@@ -81,7 +81,7 @@ CFLAGS += -MD
 -include $(OBJECTS:.o=.d)
 
 # build targets
-TARGET = ../mupen64plus-cascades-ui/lib/mupen64plus-audio-sdl.$(SO_EXTENSION)
+TARGET = ../../../libs/mupen64plus-audio-sdl.$(SO_EXTENSION)
 
 targets:
 	@echo "Mupen64Plus-audio-sdl makefile. "
