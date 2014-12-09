@@ -36,7 +36,7 @@ CXX := J:/bbndk10.2-Gold/host_10_1_0_238/win32/x86/usr/bin/qcc -V4.6.3,gcc_ntoar
 CXX += -w1 -shared
 INCLUDE = ..
 CFLAGS  += -I$(INCLUDE)/blackberry-SDL/include
-CFLAGS  += -I../mupen64plus-core-richard42/api -I../bbutil
+CFLAGS  += -I../mupen64plus-core-richard42/api -I../bbutil -I../mupen64plus-video-glide64mk2-take2/src
 CFLAGS  += -march=armv7-a -mcpu=cortex-a8 -mfpu=neon -mfloat-abi=softfp -ffast-math #\
                   #-fsingle-precision-constant  -ftree-vectorize -fexpensive-optimizations -fomit-frame-pointer
 

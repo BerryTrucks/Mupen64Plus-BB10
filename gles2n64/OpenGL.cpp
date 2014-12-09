@@ -15,9 +15,6 @@
     #endif
 #endif
 ////
-#ifdef __QNXNTO__
-#include <bbutil.h>
-#endif
 
 #include "Common.h"
 #include "gles2N64.h"
@@ -37,6 +34,9 @@
 
 #ifdef ANDROID_EDITION
 #include "ae_imports.h"
+#elif defined(__QNXNTO__)
+#include "ae_imports.h"
+#include <bbutil.h>
 #endif
 
 //// paulscode, function prototype missing from Yongzh's code
@@ -155,14 +155,10 @@ void OGL_InitStates()
 */
     //// paulscode, added for different configurations based on hardware
     // (part of the missing shadows and stars bug fix)
-#ifdef ANDROID_EDITION
+#if defined(ANDROID_EDITION) || defined(__QNXNTO__)
     int hardwareType = Android_JNI_GetHardwareType();
     float f1, f2;
     Android_JNI_GetPolygonOffset(hardwareType, 1, &f1, &f2);
-    glPolygonOffset( f1, f2 );
-#elif defined(__QNXNTO__)
-    float f1 = -0.2f;
-	float f2 = -0.2f;
     glPolygonOffset( f1, f2 );
 #endif
     ////
@@ -309,17 +305,12 @@ bool OGL_SDL_Start()
 
 bool OGL_Start()
 {
-	printf("gles2n64> OGL_Start\n");fflush(stdout);
 // paulscode, initialize SDL
 #ifdef USE_SDL
     if (!OGL_SDL_Start())
-	{
-		printf("gles2n64> OGL_Start quit\n");fflush(stdout);
         return false;
-	}
 #endif
 //
-	printf("gles2n64> OGL_Start end\n");fflush(stdout);
 
     OGL_InitStates();
 
