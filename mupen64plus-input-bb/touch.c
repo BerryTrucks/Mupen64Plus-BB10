@@ -65,7 +65,8 @@ void LoadOverlay(char* name)
 		delete_image(overlayQuad, 0);
 		delete_image(overlayKey, 1);
 		delete_image(stickQuad, 0);
-		delete_image(stickQuad2, 0);
+		if (overlay_current == 7)
+			delete_image(stickQuad2, 0);
 	}
 
 
@@ -312,6 +313,12 @@ void ProcessTouchEvent(screen_event_t *event,SController* controller,unsigned sh
 	double dist;
 	int buttonHit = 0;
 	TouchButton* whichButton = NULL;
+	
+	if (m64p_emit_touch && touch_callback)
+	{
+		(*touch_callback)();
+		return;
+	}
 
 	screen_get_event_property_iv(*event, SCREEN_PROPERTY_TYPE, &type);
 	screen_get_event_property_iv(*event, SCREEN_PROPERTY_TOUCH_ID, (int*)&contactId);
