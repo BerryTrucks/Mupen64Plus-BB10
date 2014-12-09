@@ -31,7 +31,7 @@ SRCDIR := ../../src
 OBJDIR = _obj
 
 # base CFLAGS, LDLIBS, and LDFLAGS
-OPTFLAGS ?= -O3 -mcpu=cortex-a8 -mfpu=neon -mfloat-abi=softfp
+OPTFLAGS ?= -O3 -mcpu=cortex-a8
 CFLAGS += $(OPTFLAGS) -Wall -ffast-math -fno-strict-aliasing -fvisibility=hidden -I$(SRCDIR) -marm
 CXXFLAGS += -fvisibility-inlines-hidden
 LDFLAGS += $(SHARED)
@@ -79,10 +79,9 @@ ifeq ($(OS), LINUX)
     #headers for palm, sdl, libpng
     #CFLAGS += -I/opt/PalmPDK/include
     CFLAGS += -I../../../blackberry-SDL/include -I../../../bbutil
-    CFLAGS += -D_GNU_SOURCE -D__arm__ -DANDROID -DANDROID_EDITION
-#	-DIOAPI_NO_64 -DNOCRYPT -DNOUNCRYPT
+    CFLAGS += -D_GNU_SOURCE -D__arm__ -DANDROID -DANDROID_EDITION -DIOAPI_NO_64 -DNOCRYPT -DNOUNCRYPT -DUSE_GLES=1
 	#-D_PROFILE
-    LDLIBS += -L../../../mupen64plus-cascades-ui/lib/ -lbbutil
+    LDLIBS += -L../../../libs/ -lbbutil
     #LDFLAGS += -allow-shlib-undefined
   endif
 endif
@@ -237,6 +236,7 @@ SOURCE =                              \
     $(SRCDIR)/main/eventloop.c                  \
     $(SRCDIR)/main/main.c                       \
     $(SRCDIR)/main/md5.c                        \
+    $(SRCDIR)/main/profile.c                    \
     $(SRCDIR)/main/rom.c                        \
     $(SRCDIR)/main/savestates.c                 \
     $(SRCDIR)/main/sdl_key_converter.c          \
@@ -249,7 +249,6 @@ SOURCE =                              \
     $(SRCDIR)/memory/memory.c                   \
     $(SRCDIR)/memory/n64_cic_nus_6105.c         \
     $(SRCDIR)/memory/pif.c                      \
-    $(SRCDIR)/memory/tlb.c                      \
     $(SRCDIR)/osal/dynamiclib_unix.c            \
     $(SRCDIR)/osal/files_unix.c                 \
     $(SRCDIR)/osd/screenshot.cpp                \
@@ -258,20 +257,26 @@ SOURCE =                              \
     $(SRCDIR)/plugin/dummy_rsp.c                \
     $(SRCDIR)/plugin/dummy_video.c              \
     $(SRCDIR)/plugin/plugin.c                   \
+    $(SRCDIR)/r4300/cached_interp.c             \
+    $(SRCDIR)/r4300/cp0.c                       \
+    $(SRCDIR)/r4300/cp1.c                       \
     $(SRCDIR)/r4300/empty_dynarec.c             \
     $(SRCDIR)/r4300/exception.c                 \
+    $(SRCDIR)/r4300/instr_counters.c            \
     $(SRCDIR)/r4300/interupt.c                  \
-    $(SRCDIR)/r4300/profile.c                   \
     $(SRCDIR)/r4300/pure_interp.c               \
     $(SRCDIR)/r4300/r4300.c                     \
     $(SRCDIR)/r4300/recomp.c                    \
     $(SRCDIR)/r4300/reset.c                     \
+    $(SRCDIR)/r4300/tlb.c                       \
     $(SRCDIR)/r4300/new_dynarec/new_dynarec.c
 
 ifeq ($(CPU),ARM)
 	SOURCE += $(SRCDIR)/r4300/new_dynarec/linkage_arm.S
     CFLAGS += -DDYNAREC
     CFLAGS += -DNEW_DYNAREC=3
+    CFLAGS += -mfloat-abi=softfp
+    CFLAGS += -mfpu=vfp
 endif
 
 ifeq ($(DEBUGGER), 1)

@@ -202,9 +202,7 @@ const char * osal_get_shared_filepath(const char *filename, const char *firstsea
     for (i = 0; i < datasearchdirs; i++)
     {
         if (search_dir_file(retpath, datasearchpath[i], filename) == 0)
-		{
             return retpath;
-		}
     }
 
     /* we couldn't find the file */
