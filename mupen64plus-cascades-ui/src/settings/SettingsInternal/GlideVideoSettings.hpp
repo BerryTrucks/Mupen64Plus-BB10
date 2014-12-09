@@ -24,6 +24,8 @@ class GlideVideoSettings : public VideoSettings
     Q_PROPERTY(bool DisplayTime24 READ DisplayTime24 WRITE DisplayTime24 NOTIFY DisplayTime24Changed)
     Q_PROPERTY(int HiResMode READ HiResMode WRITE HiResMode NOTIFY HiResModeChanged)
     Q_PROPERTY(int AspectRatio READ AspectRatio WRITE AspectRatio NOTIFY AspectRatioChanged)
+    Q_PROPERTY(bool AutoFrameskip READ AutoFrameskip WRITE AutoFrameskip NOTIFY AutoFrameskipChanged)
+    Q_PROPERTY(int MaxFrameskip READ MaxFrameskip WRITE MaxFrameskip NOTIFY MaxFrameskipChanged)
 
 signals:
     void ReadEveryFrameChanged();
@@ -32,6 +34,18 @@ signals:
     void DisplayTime24Changed();
     void HiResModeChanged();
     void AspectRatioChanged();
+    void AutoFrameskipChanged();
+    void MaxFrameskipChanged();
+
+public:
+    enum Aspect
+    {
+        GameDefault = -1,
+        FourToThree = 0,
+        SixteenToNine = 1,
+        Stretch = 2,
+        Original = 3
+    };
 
 public:
     bool ReadEveryFrame() { return getBool("GLIDE_READEVERYFRAME", false); }
@@ -49,8 +63,14 @@ public:
     int HiResMode() { return getInt("GLIDE_HIRES", 0); }
     void HiResMode(int val) { setInt("GLIDE_HIRES", val); }
 
-    int AspectRatio() { return getInt("GLIDE_ASPECT", 0); }
+    int AspectRatio() { return getInt("GLIDE_ASPECT", Stretch); }
     void AspectRatio(int val) { setInt("GLIDE_ASPECT", val); }
+
+    bool AutoFrameskip() { return getBool("GLIDE_AUTOFRAME", false); }
+    void AutoFrameskip(bool val) { setBool("GLIDE_AUTOFRAME", val); }
+
+    int MaxFrameskip() { return getInt("GLIDE_MAXFRAME", 0); }
+    void MaxFrameskip(int val) { setBool("GLIDE_MAXFRAME", val); }
 
 public:
     GlideVideoSettings() { }

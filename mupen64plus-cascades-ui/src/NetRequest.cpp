@@ -16,11 +16,19 @@
 
 #include "NetRequest.hpp"
 
-#include <QNetworkAccessManager>
 #include <QNetworkRequest>
 #include <QNetworkReply>
 #include <QUrl>
 #include <QDebug>
+
+#include <bb/data/XmlDataAccess>
+
+#include <QDesktopServices>
+
+using namespace bb::data;
+
+QNetworkAccessManager* TwitterRequest::s_manager = 0;
+QNetworkDiskCache* TwitterRequest::s_networkDiskCache = 0;
 
 /*
  * Default constructor
@@ -28,6 +36,13 @@
 TwitterRequest::TwitterRequest(QObject *parent)
     : QObject(parent)
 {
+    if (s_manager == 0)
+    {
+        s_manager = new QNetworkAccessManager(parent);
+        s_networkDiskCache = new QNetworkDiskCache;
+        s_networkDiskCache->setCacheDirectory(QDesktopServices::storageLocation(QDesktopServices::CacheLocation));
+        s_manager->setCache(s_networkDiskCache);
+    }
 }
 
 /*
@@ -38,10 +53,6 @@ TwitterRequest::TwitterRequest(QObject *parent)
 //! [0]
 void TwitterRequest::requestTimeline(const QString &romName)
 {
-    QNetworkAccessManager* networkAccessManager = new QNetworkAccessManager(this);
-
-    //const QString queryUri = QString::fromLatin1("http://api.twitter.com/1/statuses/user_timeline.json?include_entities=true&include_rts=true&screen_name=%1").arg(screenName);
-    //const QString queryUri = QString::fromLatin1("http://api.archive.vg/2.0/Archive.search/json/7TTRM4MNTIKR2NNAGASURHJOZJ3QXQC5/final+fantasy+vii");
     QString queryUri = QString::fromLatin1("http://thegamesdb.net/api/GetGame.php?name=");
     queryUri.append( romName );
 
@@ -59,21 +70,46 @@ void TwitterRequest::requestTimeline(const QString &romName)
     qDebug() << "BOXART URL: " << queryUri;
 
     QNetworkRequest request(queryUri);
+    request.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::PreferCache);
 
-    QNetworkReply* reply = networkAccessManager->get(request);
+    QNetworkReply* reply = s_manager->get(request);
 
     connect(reply, SIGNAL(finished()), this, SLOT(onTimelineReply()));
 }
 //! [0]
 
+void TwitterRequest::requestId(const QString &name)
+{
+    QString queryUri = QString::fromLatin1("http://thegamesdb.net/api/GetGame.php?name=");
+    queryUri.append(name);
+
+    //Try and sanitize string a bit
+    int index = queryUri.indexOf("(");
+
+    if(index > 0){
+        queryUri.truncate(index);
+    } else {
+        queryUri.truncate(queryUri.lastIndexOf("."));
+    }
+
+    queryUri.append( QString::fromLatin1("&platform=Nintendo+64") );
+
+    QNetworkRequest request(queryUri);
+    request.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::PreferCache);
+
+    QNetworkReply* reply = s_manager->get(request);
+
+    connect(reply, SIGNAL(finished()), this, SLOT(onIdReply()));
+}
+
 void TwitterRequest::requestVersion()
 {
-    QNetworkAccessManager* networkAccessManager = new QNetworkAccessManager(this);
     QString queryUri = QString::fromLatin1("https://raw.githubusercontent.com/tredpath/Mupen64Plus-BB10/master/mupen64plus-cascades-ui/VERSION");
 
     QNetworkRequest request(queryUri);
+    request.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::PreferNetwork);
 
-    QNetworkReply* reply = networkAccessManager->get(request);
+    QNetworkReply* reply = s_manager->get(request);
 
     connect(reply, SIGNAL(finished()), this, SLOT(onVersionReply()));
 }
@@ -113,6 +149,26 @@ void TwitterRequest::onTimelineReply()
     emit complete(response, success);
 }
 //! [1]
+
+void TwitterRequest::onIdReply()
+{
+    QNetworkReply* reply = qobject_cast<QNetworkReply*>(sender());
+
+    QString response;
+    if (reply) {
+        if (reply->error() == QNetworkReply::NoError) {
+            const int available = reply->bytesAvailable();
+            if (available > 0) {
+                const QByteArray buffer = reply->readAll();
+                response = QString::fromUtf8(buffer);
+                emit idDiscovered(response);
+                //printf("RESPONSE: %s\n", response.toAscii().constData());
+            }
+        }
+
+        reply->deleteLater();
+    }
+}
 
 void TwitterRequest::onVersionReply()
 {

@@ -19,6 +19,9 @@
 
 #include <QtCore/QObject>
 
+#include <QNetworkAccessManager>
+#include <QNetworkDiskCache>
+
 /*
  * This class is responsible for making a REST call to the twitter api
  * to retrieve the latest feed for a twitter screen name. It emits the complete()
@@ -39,6 +42,7 @@ public:
      */
     void requestTimeline(const QString &screenName);
     void requestVersion();
+    void requestId(const QString &name);
 
 Q_SIGNALS:
     /*
@@ -48,6 +52,7 @@ Q_SIGNALS:
      * @param success - true if twitter request succeed, false if not
      */
     void complete(const QString &info, bool success);
+    void idDiscovered(const QString&);
 
 private Q_SLOTS:
     /*
@@ -55,6 +60,11 @@ private Q_SLOTS:
      */
     void onTimelineReply();
     void onVersionReply();
+    void onIdReply();
+
+private:
+    static QNetworkAccessManager* s_manager;
+    static QNetworkDiskCache* s_networkDiskCache;
 };
 //! [0]
 

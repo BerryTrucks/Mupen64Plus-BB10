@@ -13,11 +13,24 @@
  * limitations under the License.
  */
 #include "frontend.h"
+#include "BPS/BpsEventHandler.hpp"
+#include "History/Game.hpp"
+#include "main.h"
+#include "bbutil.h"
+#include "m64p_types.h"
+#include "core_interface.h"
+#include "GameInfo/GameImage.hpp"
+
 #include <sys/stat.h>
 #include <unistd.h>
+#include <stdlib.h>
 #include <string>
 #include <sstream>
 #include <climits>
+#include <utime.h>
+
+#include <QSettings>
+#include <QSignalMapper>
 
 #include <bb/cascades/QmlDocument>
 #include <bb/cascades/TabbedPane>
@@ -43,26 +56,32 @@
 #include <bb/cascades/pickers/FilePickerSortOrder>
 #include <bb/cascades/pickers/FileType>
 
-#include <QSettings>
-#include <QSignalMapper>
-
 #include <bb/data/XmlDataAccess>
+
 #include <bb/platform/HomeScreen>
 #include <bb/platform/PlatformInfo>
 
 #include <bb/system/SystemToast>
 #include <bb/system/SystemListDialog>
-#include <bps/bps.h>
-#include <bps/screen.h>
-#include <bps/event.h>
-#include <sys/keycodes.h>
+#include <bb/system/SystemDialog>
+#include <bb/system/SystemPrompt>
+#include <bb/system/InvokeManager>
+#include <bb/system/InvokeRequest>
+
+#include <bb/device/Led>
 
 #include <bb/Packageinfo>
 
-#include "main.h"
-#include "bbutil.h"
+#include <bps/bps.h>
+#include <bps/screen.h>
+#include <bps/event.h>
+#include <bps/navigator_invoke.h>
 
+#include <sys/keycodes.h>
 #include <sys/neutrino.h>
+
+#include <zip.h>
+#include <unzip.h>
 
 using namespace bb::cascades::pickers;
 using namespace bb::cascades;
@@ -85,6 +104,12 @@ int chid = -1, coid = -1;
 
 extern bool debug_mode;
 extern bool first_on_new_settings;
+extern BpsEventHandler *s_handler;
+
+extern Frontend *mainApp;
+
+QQueue<QPair<int, unsigned char*> > Frontend::s_screenQueue;
+int Frontend::s_isOsThree = -1;
 
 #define COLORIZE(color) ((float)(((double)(color)) / 255.0))
 
@@ -147,6 +172,12 @@ void initController(GameController* controller, int player)
     controller->analog0[0] = controller->analog0[1] = controller->analog0[2] = 0;
     controller->analog1[0] = controller->analog1[1] = controller->analog1[2] = 0;
     sprintf(controller->deviceString, "Player %d: No device detected.", player + 1);
+}
+
+void touch_close_menu()
+{
+    m64p_emit_touch = false;
+    QTimer::singleShot(0, mainApp, SLOT(swipedown_external()));
 }
 
 void Frontend::create_button_mapper() {
@@ -227,7 +258,10 @@ void Frontend::create_button_mapper() {
 	screen_post_window(screen_win_map, screen_buf[0], 1, rect, 0);
 
 	bps_initialize();
-	screen_request_events(screen_cxt);
+	if (screen_request_events(screen_cxt) != BPS_SUCCESS)
+	{
+	    printf("Error getting screen events\n");fflush(stdout);
+	}
 }
 
 QDataStream& operator<<(QDataStream& out, const Game &obj)
@@ -264,8 +298,12 @@ Frontend::Frontend()
 	qmlRegisterType<bb::cascades::pickers::FilePicker>("bb.cascades.pickers", 1, 0, "FilePicker");
 	qmlRegisterUncreatableType<bb::cascades::pickers::FileType>("bb.cascades.pickers", 1, 0, "FileType", "");
 	qmlRegisterType<ImageLoader>();
+    qmlRegisterType<GameImage>("travis.lib", 1, 0, "GameImage");
+    qmlRegisterType<GameInfo>("travis.lib", 1, 0, "GameInfo");
 	qRegisterMetaType<Game>("Game");
 	qRegisterMetaTypeStreamOperators<Game>("Game");
+	qmlRegisterType<INIEntry>("travis.lib", 1, 0, "INIEntry");
+	qmlRegisterType<RiceINI>("travis.lib", 1, 0, "RiceINI");
 
     // Set the application organization and name, which is used by QSettings
     // when saving values to the persistent store.
@@ -291,22 +329,6 @@ NOT_OK:
 	    VERSION_RELEASE = INT_MAX;
 	}
 
-#ifdef BB103
-    m_isOsThree = true;
-#else
-    m_isOsThree = false;
-    PlatformInfo info;
-    QString os = info.osVersion();
-    QStringList oss = os.split('.', QString::SkipEmptyParts);
-    if (oss.length() > 1)
-    {
-        bool ok;
-        int min = oss[1].toInt(&ok);
-        if (min > 2)
-            m_isOsThree = true;
-    }
-#endif
-
 	//Set up a
 	m_hdmiInfo = NULL;
 	m_useHdmi = false;
@@ -323,14 +345,32 @@ NOT_OK:
 	m_numMenuItems = 0;
 	m_noTouchScreenControllers = true;
 	m_selectStateSaving = false;
+	m_loadingGame = true;
+	m_riceini.ReadIniFile();
+
+	touch_callback = &touch_close_menu;
+
+	QTime now = QTime::currentTime();
+	qsrand(now.msec());
+
+	m_imageName = m_settings->value("IMAGE_RESOURCE_NAME", "").toString();
 
 	if(access("shared/misc/n64/", F_OK) != 0)
-	{
 		mkdir("shared/misc/n64/", S_IRWXU | S_IRWXG);
-		mkdir("shared/misc/n64/data", S_IRWXU | S_IRWXG);
-		mkdir("shared/misc/n64/roms", S_IRWXU | S_IRWXG);
-		mkdir("shared/misc/n64/.boxart", S_IRWXU | S_IRWXG);
 
+	if (access("shared/misc/n64/data", F_OK) != 0)
+		mkdir("shared/misc/n64/data", S_IRWXU | S_IRWXG);
+    if (access("shared/misc/n64/roms", F_OK) != 0)
+		mkdir("shared/misc/n64/roms", S_IRWXU | S_IRWXG);
+    if (access("shared/misc/n64/.boxart", F_OK) != 0)
+		mkdir("shared/misc/n64/.boxart", S_IRWXU | S_IRWXG);
+    if (access("shared/misc/n64/save", F_OK) != 0)
+        mkdir("shared/misc/n64/save", S_IRWXU | S_IRWXG);
+    if (access("shared/misc/n64/hires_texture", F_OK) != 0)
+        mkdir("shared/misc/n64/hires_texture", S_IRWXU | S_IRWXG);
+
+    if (!QFile::exists("shared/misc/n64/data/mupen64plus.cfg"))
+    {
 		char buf[8192];
 		size_t size;
 
@@ -457,6 +497,8 @@ NOT_OK:
 	connect(m_menuAnimation, SIGNAL(finished()), SLOT(showMenuFinished()));
 	connect(this, SIGNAL(menuOffsetChanged()), SLOT(onMenuOffsetChanged()));
 	connect(this, SIGNAL(createOption(QString, QString, QUrl)), SLOT(onCreateOption(QString, QString, QUrl)));
+    connect(s_handler, SIGNAL(PlayReleased()), SLOT(onPlayReleased()));
+    connect(s_handler, SIGNAL(CapturePressed()), SLOT(onCapturePressed()));
 
 	toast = new SystemToast(this);
 	toastButton = new SystemToast(this);
@@ -468,10 +510,15 @@ NOT_OK:
     QmlDocument *qml = QmlDocument::create("asset:///main.qml");
     qml->setContextProperty("_frontend", this);
     qml->setContextProperty("_settings", m_gameSettings);
+    qml->setContextProperty("_game", &m_gameInfo);
 
     if (!qml->hasErrors())
     {
-        printf("qml has no errors\n"); fflush(stdout);
+        if (debug_mode)
+        {
+            printf("qml has no errors, hooray\n");
+            fflush(stdout);
+        }
         m_tab = qml->createRootObject<TabbedPane>();
         if (m_tab)
         {
@@ -479,9 +526,12 @@ NOT_OK:
 
             Application::instance()->setScene(m_tab);
 
-        	TwitterRequest* request = new TwitterRequest(this);
-        	connect(request, SIGNAL(complete(QString, bool)), this, SLOT(onVersionRecieved(QString, bool)));
-        	request->requestVersion();
+            if (m_gameSettings->Settings()->CheckVersion())
+            {
+                TwitterRequest* request = new TwitterRequest(this);
+                connect(request, SIGNAL(complete(QString, bool)), this, SLOT(onVersionRecieved(QString, bool)));
+                request->requestVersion();
+            }
 
             start();
         }
@@ -490,6 +540,29 @@ NOT_OK:
     {
         printf("qml has errors\n"); fflush(stdout);
     }
+}
+
+bool Frontend::isOSThree()
+{
+    if (s_isOsThree < 0)
+    {
+#ifdef BB103
+        s_isOsThree = 1;
+#else
+        s_isOsThree = 0;
+        PlatformInfo info;
+        QString os = info.osVersion();
+        QStringList oss = os.split('.', QString::SkipEmptyParts);
+        if (oss.length() > 1)
+        {
+            bool ok;
+            int min = oss[1].toInt(&ok);
+            if (min > 2)
+                s_isOsThree = 1;
+        }
+#endif
+    }
+    return s_isOsThree == 1;
 }
 
 Frontend::~Frontend()
@@ -536,6 +609,82 @@ void Frontend::refreshTheme()
 #endif
 }
 
+bool removeDir(const QString & dirName)
+{
+    bool result = true;
+    QDir dir(dirName);
+    printf("Attempting to remove directory: %s\n", dirName.toAscii().constData());
+
+    if (dir.exists(dirName)) {
+        Q_FOREACH(QFileInfo info, dir.entryInfoList(QDir::NoDotAndDotDot | QDir::System | QDir::Hidden  | QDir::AllDirs | QDir::Files, QDir::DirsFirst))
+        {
+            if (info.isDir())
+            {
+                result = removeDir(info.absoluteFilePath());
+            }
+            else
+            {
+                result = QFile::remove(info.absoluteFilePath());
+            }
+
+            if (!result)
+            {
+                return result;
+            }
+        }
+        result = dir.rmdir(dirName);
+    }
+    else
+    {
+        printf("Directory doesn't exist\n");fflush(stdout);
+    }
+    return result;
+}
+
+static Led led;
+void Frontend::saveScreenShot()
+{
+    QDir dir;
+    removeDir(dir.absolutePath() + "/data/gif");
+    mkdir("data/gif", 0777);
+    printf("Saving %d images\n", s_screenQueue.size());fflush(stdout);
+    while (s_screenQueue.size() > 0)
+    {
+        QPair<int, unsigned char*> working = s_screenQueue.takeFirst();
+        QString name = dir.absolutePath() + QString::fromLatin1("/data/gif/screen");
+        name += QString::number(working.first);
+        name += QString::fromLatin1(".png");
+        QImage img(working.second, emuWidth(), emuHeight(), QImage::Format_ARGB32);
+        img = img.rgbSwapped();
+        img = img.mirrored(false, true);
+        if (!img.save(name, "PNG"))
+            printf("Failed to save image %s\n", name.toAscii().constData());
+        else
+            printf("Saved image %s, %d left\n", name.toAscii().constData(), s_screenQueue.size());
+        fflush(stdout);
+        delete working.second;
+    }
+    led.setColor(LedColor::Magenta);
+    led.flash(1);
+}
+
+void captureScreen(int id, unsigned char* buffer, int size)
+{
+    unsigned char* buffer2 = new unsigned char[size];
+    memcpy(buffer2, buffer, size);
+    Frontend::s_screenQueue.append(QPair<int, unsigned char*>(id, buffer2));
+    if (id == 0)
+    {
+        QTimer::singleShot(0, mainApp, SLOT(saveScreenShot()));
+    }
+}
+
+void Frontend::onCapturePressed()
+{
+    //capture_callback = captureScreen;
+    //begin_capture();
+}
+
 bool Frontend::debugMode()
 {
 	return debug_mode;
@@ -580,6 +729,7 @@ void Frontend::run()
 	initController(&_controllers[3], 3);
 	create_button_mapper();
 	discoverControllers();
+	discoverBluetoothDevices();
 	detectHDMI();
 	setHistory(getHistory());
 
@@ -767,7 +917,13 @@ void Frontend::run()
             {
                 if (input == -3)
                 {
-                    m_noTouchScreenControllers = false;
+                    if (i == 0)
+                    {
+                        if (m_gameSettings->Player1TouchscreenSettings()->ControllerLayout() != 5)
+                            m_noTouchScreenControllers = false;
+                    }
+                    else
+                        m_noTouchScreenControllers = false;
                     if (emuWidth() != emuHeight())
                     {
                         if (m_useHdmi && m_hdmiInfo && m_hdmiInfo->isAttached())
@@ -795,6 +951,7 @@ void Frontend::run()
                 }
             }
         }
+        emit UseForeignWindowControlChanged();
         emit touchScreenControllerCountChanged();
 		//screen resolution
 		std::ostringstream s, s3, s5;
@@ -867,6 +1024,7 @@ void Frontend::run()
         m_gameSettings->RiceSettings()->writeSettings(m64p);
         m_gameSettings->N64Settings()->writeSettings(m64p);
         m_gameSettings->GlideSettings()->writeSettings(m64p);
+        m_gameSettings->Hardware()->writeSettings(m64p);
         for (int i = 0; i < 4; i++)
         {
             m_gameSettings->PlayerKeyboardSettings(i + 1)->writeSettings(m64p);
@@ -878,6 +1036,15 @@ void Frontend::run()
         m64p->SetConfigParameter("CoreEvents[Kbd Mapping Gameshark]=103");
         m64p->SetConfigParameter("CoreEvents[Kbd Mapping Fast Forward]=102");
 
+        m_riceini.WriteIniFile();
+        //m_riceini.OutputSectionDetails(qint32 i, stdout);
+        fflush(stdout);
+
+        if (m_gameSettings->VideoPlugin() == M64PSettings::GLIDE)
+        {
+            setupGlide();
+        }
+
         emit rotationChanged();
 
 		m_emuRunning = true;
@@ -886,6 +1053,63 @@ void Frontend::run()
 		m64p->Start();
 		//m64p->print_controller_config();
 	}
+}
+
+void Frontend::setupGlide()
+{
+    int screenwidth = emuWidth();
+    int screenheight = emuHeight();
+    int ratio = m_gameSettings->GlideSettings()->AspectRatio();
+    egl_letterbox = false;
+    egl_pillarbox = false;
+    if (ratio != GlideVideoSettings::Stretch)
+    {
+        double widthreference;
+        double heightreference;
+        if (ratio == GlideVideoSettings::Original || ratio == GlideVideoSettings::GameDefault || ratio == GlideVideoSettings::FourToThree)
+        {
+            widthreference = 4.0;
+            heightreference = 3.0;
+        }
+        else
+        {
+            widthreference = 16.0;
+            heightreference = 9.0;
+            //don't pillar box or letter box a 16:9 ratio on a 16:9 device
+            if (screenwidth == 720 && screenheight == 1280)
+                return;
+        }
+        //keyboard devices with 1:1 screens always letterbox
+        if (screenwidth == screenheight)
+        {
+            egl_letterbox = true;
+            egl_width = screenwidth;
+            int windowheight = (int)(((double)screenwidth) * heightreference / widthreference);
+            egl_height = (int)(((double)(screenwidth - windowheight)) * 0.5);
+            egl_bottom = egl_height + windowheight;
+        }
+        else
+        {
+            //4:3 on either 16:9 or 15:9 devices need pillar boxing
+            if (widthreference == 4.0)
+            {
+                egl_pillarbox = true;
+                egl_height = screenheight;
+                int windowwidth = (int)(((double)screenheight) * widthreference / heightreference);
+                egl_width = (int)(((double)(screenwidth - windowwidth)) * 0.5);
+                egl_left = egl_width + windowwidth;
+            }
+            //16:9 on a 15:9 device needs letter boxing
+            else
+            {
+                egl_letterbox = true;
+                egl_width = screenwidth;
+                int windowheight = (int)(((double)screenwidth) * heightreference / widthreference);
+                egl_height = (int)(((double)(screenheight - windowheight)) * 0.5);
+                egl_bottom = egl_height + windowheight;
+            }
+        }
+    }
 }
 
 void Frontend::onThumbnail()
@@ -937,12 +1161,14 @@ void Frontend::swipedown()
         return;
     if (menuOffset() > 0)
     {
+        m64p_emit_touch = false;
         m_menuAnimation->setStartValue(175);
         m_menuAnimation->setEndValue(0);
         m_menuAnimation->start();
     }
     else
     {
+        m64p_emit_touch = true;
         m_menuAnimation->setStartValue(0);
         m_menuAnimation->setEndValue(175);
         m_menuAnimation->start();
@@ -985,8 +1211,18 @@ void Frontend::setHistory(QList<Game> list)
 		map["name"] = gm.name();
 		map["time"] = gm.date();
 		map["resource"] = gm.resource();
+		QString clearRes = gm.resource();
+		int index = clearRes.lastIndexOf('.');
+		clearRes = clearRes.left(index);
+		clearRes += "_clear.png";
+		map["clear"] = clearRes;
+		if (QFile::exists(clearRes.mid(7)))
+		    map["hasclear"] = true;
+		else
+		    map["hasclear"] = false;
 		map["location"] = gm.location();
 		map["uuid"] = gm.uuid();
+		map["pinned"] = gm.isPinned();
 		(*m_history) << map;
 	}
 	m_settings->endArray();
@@ -1003,13 +1239,24 @@ void Frontend::addToHistory(QString title)
 	QList<Game> history = getHistory();
 	Game gm(title);
 	bool boxart = m_gameSettings->Settings()->BoxartScraping();
-	for (int i = 0; i < history.size(); i++)
+	int i;
+	for (i = 0; i < history.size(); i++)
 	{
-		if (QString::compare(history[i].name(), title, Qt::CaseInsensitive) == 0)
+		if (QString::compare(history[i].baseName(), title, Qt::CaseInsensitive) == 0)
 		{
-			gm = history.takeAt(i);
+			gm = history.at(i);
 			break;
 		}
+	}
+	if (gm.isPinned())
+	{
+	    gm.playNow();
+	    setHistory(history);
+	    return;
+	}
+	else if (i != history.size())
+	{
+	    gm = history.takeAt(i);
 	}
     QString selectedFile = mRom.mid(mRom.lastIndexOf('/') + 1);
     int tmp2 = selectedFile.indexOf("(");
@@ -1033,7 +1280,13 @@ void Frontend::addToHistory(QString title)
 		gm.resource(imageSource);
 	gm.location(mRom);
 	gm.playNow();
-	history.insert(0, gm);
+	int j;
+	for (j = 0; j < history.size(); j++)
+	{
+	    if (!history[j].isPinned())
+	        break;
+	}
+	history.insert(j, gm);
 	setHistory(history);
 }
 
@@ -1052,6 +1305,94 @@ void Frontend::removeFromHistory(QString uuid)
 	}
 }
 
+void Frontend::changeHistoryName(QString uuid)
+{
+    QUuid id(uuid);
+    QList<Game> hist = getHistory();
+    for (int i = 0; i < hist.size(); i++)
+    {
+        if (hist[i] == id)
+        {
+            SystemPrompt *prompt = new SystemPrompt();
+            prompt->setTitle(tr("Enter a new name"));
+            prompt->setDismissAutomatically(true);
+            prompt->inputField()->setDefaultText(hist[i].name());
+            prompt->inputField()->setEmptyText(tr("Enter a new name"));
+            prompt->setProperty("EDITUUID", uuid);
+            connect(prompt, SIGNAL(finished(bb::system::SystemUiResult::Type)), SLOT(historyRenameSelected(bb::system::SystemUiResult::Type)));
+            prompt->show();
+            break;
+        }
+    }
+}
+
+void Frontend::pinHistory(QString uuid)
+{
+    QUuid id(uuid);
+    QList<Game> hist = getHistory();
+    for (int i = 0; i < hist.size(); i++)
+    {
+        if (hist[i] == id)
+        {
+            Game g = hist.takeAt(i);
+            g.setPinned(true);
+            int j;
+            for (j = 0; j < hist.size(); j++)
+            {
+                if (!hist[j].isPinned())
+                    break;
+            }
+            hist.insert(j, g);
+            setHistory(hist);
+            break;
+        }
+    }
+}
+
+void Frontend::unpinHistory(QString uuid)
+{
+    QUuid id(uuid);
+    QList<Game> hist = getHistory();
+    for (int i = 0; i < hist.size(); i++)
+    {
+        if (hist[i] == id)
+        {
+            Game g = hist.takeAt(i);
+            g.setPinned(false);
+            int j;
+            for (j = 0; j < hist.size(); j++)
+            {
+                if (!hist[j].isPinned())
+                    break;
+            }
+            hist.insert(j, g);
+            setHistory(hist);
+            break;
+        }
+    }
+}
+
+void Frontend::historyRenameSelected(bb::system::SystemUiResult::Type result)
+{
+    if (result == SystemUiResult::ConfirmButtonSelection)
+    {
+        SystemPrompt *prompt = qobject_cast<SystemPrompt*>(sender());
+        QString uuid = prompt->property("EDITUUID").toString();
+        QUuid id(uuid);
+        QList<Game> hist = getHistory();
+        for (int i = 0; i < hist.size(); i++)
+        {
+            if (hist[i] == id)
+            {
+                hist[i].rename(prompt->inputFieldTextEntry());
+                setHistory(hist);
+                break;
+            }
+        }
+        prompt->deleteLater();
+    }
+}
+
 void Frontend::clearHistory()
 {
 	if (m_history->size() == 0)
@@ -1065,6 +1406,7 @@ void Frontend::clearHistory()
 
 void Frontend::startEmulatorInternal()
 {
+    s_handler->startEmulating();
 	int msg = 1;
 	MsgSend(coid, &msg, sizeof(msg), NULL, 0);
 	m_currentROM = QString(m64p->l_RomName);
@@ -1084,6 +1426,23 @@ QString Frontend::getRom()
     return mRom;
 }
 
+//TODO working
+void Frontend::onPlayReleased()
+{
+    /*screen_event_t sevent;
+    int err = screen_create_event(&sevent);
+    printf("screen_create_event: %d\n", err);fflush(stdout);
+    int param[] = { SCREEN_EVENT_GAMEPAD };
+    screen_set_event_property_iv(sevent, SCREEN_PROPERTY_TYPE, param);
+    int buttons[] = { 0x1 };
+    screen_set_event_property_iv(sevent, SCREEN_PROPERTY_BUTTONS, buttons);
+    int analog0[] = { 0, 100, 0 };
+    screen_set_event_property_iv(sevent, SCREEN_PROPERTY_ANALOG0, analog0);
+    screen_set_event_property_iv(sevent, SCREEN_PROPERTY_ANALOG1, analog0);
+    err = screen_send_event(screen_cxt, sevent, getpid());
+    printf("screen_send_event: %d\n", err);fflush(stdout);*/
+}
+
 void Frontend::setRom(QString i)
 {
     mRom = i;
@@ -1092,10 +1451,73 @@ void Frontend::setRom(QString i)
     emit romChanged(mRom);
 }
 
+void ROM_GetRomNameFromHeader(char * szName, unsigned char* szStartName)
+{
+    char * p;
+
+    memcpy(szName, szStartName, 20);
+    szName[20] = '\0';
+
+    p = szName + (strlen((char*)szName) -1);        // -1 to skip null
+    while (p >= szName && *p == ' ')
+    {
+        *p = 0;
+        p--;
+    }
+}
+
 void Frontend::LoadRom()
 {
 	m64p->LoadRom();
+	emit gameHasId(false);
+    TwitterRequest* request = new TwitterRequest(this);
+    connect(request, SIGNAL(idDiscovered(const QString&)), this, SLOT(onIdDiscovered(const QString&)));
+    QString romname = mRom.right(mRom.length() - mRom.lastIndexOf('/') - 1);
+    printf("Requested Game: %s\n", romname.toAscii().constData());
+    fflush(stdout);
+    request->requestId(romname);
 	emit ROMLoaded();
+	QString crc = info_crc();
+    m64p_rom_header RomHeader;
+    if ((*CoreDoCommand)(M64CMD_ROM_GET_HEADER, sizeof(RomHeader), &RomHeader) == M64ERR_SUCCESS)
+    {
+        char RomSection[51];
+        sprintf(RomSection, "%08x%08x-%02x", RomHeader.CRC1, RomHeader.CRC2, RomHeader.Country_code);
+        printf("Loading Rice settings for CRC: %s\n", RomSection);
+        char name[256];
+        ROM_GetRomNameFromHeader(name, RomHeader.Name);
+        printf("ROM Name: %s\n", name);fflush(stdout);
+        m_riceini.setCRC(QString::fromUtf8(RomSection), QString::fromUtf8(name));
+    }
+}
+
+void Frontend::onIdDiscovered(const QString& info)
+{
+    //printf("ID Discovered: %s\n", info.toAscii().constData());fflush(stdout);
+    m_gameInfo.parse(info);
+    if (m_gameInfo.Id() <= 0)
+        emit gameHasId(false);
+    else
+    {
+        emit gameHasId(true);
+        QString filename = mRom.right(mRom.length() - mRom.lastIndexOf('/') - 1);
+        int tmp = filename.indexOf("(");
+        if (tmp >= 0)
+            filename = filename.left(tmp) + "_clear.png";
+        else
+            filename = filename.left(filename.lastIndexOf('.')) + "_clear.png";
+        if (!QFile::exists("/accounts/1000/shared/misc/n64/.boxart/" + filename))
+            m_gameInfo.ClearIcon()->SaveImage("/accounts/1000/shared/misc/n64/.boxart/" + filename);
+    }
+}
+
+bool Frontend::fileExists(const QString& filename)
+{
+    QString name = QString(filename);
+    if (name.startsWith("file://"))
+        name = name.right(name.length() - 7);
+    QFileInfo info(name);
+    return info.exists();
 }
 
 void Frontend::pressGameshark()
@@ -1290,7 +1712,7 @@ Container * Frontend::createCheatToggle(sCheatInfo *pCur)
 	DockLayout *pDockLayout = new DockLayout();
 	CheatToggle->setLayout(pDockLayout);
 
-	Container *nameContainer = Container::create().right(300);
+	Container *nameContainer = Container::create().right(200);
 	nameContainer->add(Label::create().text(QString(pCur->Name))
 									.vertical(VerticalAlignment::Center)
 									.multiline(true)
@@ -1388,29 +1810,241 @@ void Frontend::createCheatsPage()
 	{
 		if (pCur->VariableLine == -1)
 		{
-			if (pCur->Description == NULL)
-			{
-				//printf("   %i: %s\n", pCur->Number, pCur->Name);
-				mCheatsContainer->add(createCheatToggle(pCur));
-			}
-			else
-			{
-				//printf("   %i: %s (%s)\n", pCur->Number, pCur->Name, pCur->Description);
-				mCheatsContainer->add(createCheatToggle(pCur));
-			}
-		//TODO: Check if this is true and make a dropdown
+			mCheatsContainer->add(createCheatToggle(pCur));
 		}
 		else
 		{
-			//int i;
 			mCheatsContainer->add(createCheatDropDown(pCur));
-			//for (i = 0; i < pCur->Codes[pCur->VariableLine].var_count; i++)
-				//printf("      %i: %s\n", i, pCur->Codes[pCur->VariableLine].variable_names[i]);
 		}
 		pCur = pCur->Next;
 	}
 
 	CheatFreeAll();
+}
+
+QString Frontend::info_goodname()
+{
+    m64p_rom_settings RomSettings;
+    if ((*CoreDoCommand)(M64CMD_ROM_GET_SETTINGS, sizeof(RomSettings), &RomSettings) != M64ERR_SUCCESS)
+    {
+        printf("UI-Console: couldn't get ROM settings information from core library\n");
+        return "";
+    }
+    return QString::fromAscii(RomSettings.goodname);
+}
+
+QString Frontend::info_name()
+{
+    m64p_rom_header RomHeader;
+    if ((*CoreDoCommand)(M64CMD_ROM_GET_HEADER, sizeof(RomHeader), &RomHeader) != M64ERR_SUCCESS)
+    {
+        printf("UI-Console: couldn't get ROM header information from core library\n");
+        return "";
+    }
+    return QString::fromAscii((char*)RomHeader.Name);
+}
+
+QString Frontend::info_md5()
+{
+    m64p_rom_settings RomSettings;
+    if ((*CoreDoCommand)(M64CMD_ROM_GET_SETTINGS, sizeof(RomSettings), &RomSettings) != M64ERR_SUCCESS)
+    {
+        printf("UI-Console: couldn't get ROM settings information from core library\n");
+        return "";
+    }
+    return RomSettings.MD5;
+}
+
+QString Frontend::info_crc()
+{
+    m64p_rom_header RomHeader;
+    if ((*CoreDoCommand)(M64CMD_ROM_GET_HEADER, sizeof(RomHeader), &RomHeader) != M64ERR_SUCCESS)
+    {
+        printf("UI-Console: couldn't get ROM header information from core library\n");
+        return "";
+    }
+    char RomSection[24];
+    sprintf(RomSection, "%08X %08X", sl(RomHeader.CRC1), sl(RomHeader.CRC2));
+    return QString::fromAscii(RomSection);
+}
+
+QString Frontend::info_imagetype()
+{
+    QFileInfo inf(mRom);
+    QString ext = inf.suffix();
+    if (QString::compare(ext, "z64") == 0)
+        return ".z64 (native)";
+    if (QString::compare(ext, "v64") == 0)
+        return ".v64 (byteswapped)";
+    if (QString::compare(ext, "n64") == 0)
+        return ".n64 (wordswapped)";
+    if (QString::compare(ext, "zip") == 0)
+    {
+        unzFile uf = unzOpen(mRom.toAscii().constData());
+        if (!uf)
+        {
+            printf("Error: couldn't open ROM file '%s' for reading.\n", mRom.toAscii().constData());
+            return "";
+        }
+        unz_global_info gi;
+        unzGetGlobalInfo(uf, &gi);
+        for (uLong i = 0; i < gi.number_entry; i++)
+        {
+            char filename_inzip[256];
+            unz_file_info file_info;
+            unzGetCurrentFileInfo(uf, &file_info, filename_inzip, sizeof(filename_inzip), NULL, 0, NULL, 0);
+            printf("Looking at file %s\n", filename_inzip);
+            QString filename(filename_inzip);
+            inf = QFileInfo(filename);
+            ext = inf.suffix();
+            if (QString::compare(ext, "z64") == 0)
+            {
+                unzClose(uf);
+                return ".z64 (native)";
+            }
+            if (QString::compare(ext, "v64") == 0)
+            {
+                unzClose(uf);
+                return ".v64 (byteswapped)";
+            }
+            if (QString::compare(ext, "n64") == 0)
+            {
+                unzClose(uf);
+                return ".n64 (wordswapped)";
+            }
+            if ((i + 1) < gi.number_entry)
+                unzGoToNextFile(uf);
+        }
+        unzClose(uf);
+    }
+    return "";
+}
+
+QString Frontend::info_romsize()
+{
+    QFileInfo inf(mRom);
+    if (inf.exists())
+    {
+        if (QString::compare(inf.suffix(), "zip", Qt::CaseInsensitive) != 0)
+        {
+            qint64 size = inf.size();
+            return QString::number(size) + " bytes (or " + QString::number(size / 1024 / 1024) + " Mb or " + QString::number(size / 1024 / 1024 * 8) + " Megabits";
+        }
+        else
+        {
+            unzFile uf = unzOpen(mRom.toAscii().constData());
+            if (!uf)
+            {
+                printf("Error: couldn't open ROM file '%s' for reading.\n", mRom.toAscii().constData());
+                return "";
+            }
+            unz_global_info gi;
+            unzGetGlobalInfo(uf, &gi);
+            uLong size = 0;
+            for (uLong i = 0; i < gi.number_entry; i++)
+            {
+                char filename_inzip[256];
+                unz_file_info file_info;
+                unzGetCurrentFileInfo(uf, &file_info, filename_inzip, sizeof(filename_inzip), NULL, 0, NULL, 0);
+                size += file_info.uncompressed_size;
+                if ((i + 1) < gi.number_entry)
+                    unzGoToNextFile(uf);
+            }
+            unzClose(uf);
+            return QString::number(size) + " bytes (or " + QString::number(size / 1024 / 1024) + " Mb or " + QString::number(size / 1024 / 1024 * 8) + " Megabits)";
+        }
+    }
+    return "";
+}
+
+QString Frontend::info_version()
+{
+    m64p_rom_header RomHeader;
+    if ((*CoreDoCommand)(M64CMD_ROM_GET_HEADER, sizeof(RomHeader), &RomHeader) != M64ERR_SUCCESS)
+    {
+        printf("UI-Console: couldn't get ROM header information from core library\n");
+        return "";
+    }
+    return QString::number(sl(RomHeader.Release), 16);
+}
+
+QString Frontend::info_manufacturer()
+{
+    m64p_rom_header RomHeader;
+    if ((*CoreDoCommand)(M64CMD_ROM_GET_HEADER, sizeof(RomHeader), &RomHeader) != M64ERR_SUCCESS)
+    {
+        printf("UI-Console: couldn't get ROM header information from core library\n");
+        return "";
+    }
+    if (sl(RomHeader.Manufacturer_ID) == 'N')
+        return tr("Nintendo");
+    return "0x" + QString::number(sl(RomHeader.Manufacturer_ID), 16);
+}
+
+QString countrycodestring(unsigned short countrycode)
+{
+    switch (countrycode)
+    {
+    case 0:    /* Demo */
+        return "Demo";
+        break;
+
+    case '7':  /* Beta */
+        return "Beta";
+        break;
+
+    case 0x41: /* Japan / USA */
+        return "USA/Japan";
+        break;
+
+    case 0x44: /* Germany */
+        return "Germany";
+        break;
+
+    case 0x45: /* USA */
+        return "USA";
+        break;
+
+    case 0x46: /* France */
+        return "France";
+        break;
+
+    case 'I':  /* Italy */
+        return "Italy";
+        break;
+
+    case 0x4A: /* Japan */
+        return "Japan";
+        break;
+
+    case 'S':  /* Spain */
+        return "Spain";
+        break;
+
+    case 0x55: case 0x59:  /* Australia */
+        return "Australia (0x" + QString::number(countrycode, 16) + ")";
+        break;
+
+    case 0x50: case 0x58: case 0x20:
+    case 0x21: case 0x38: case 0x70:
+        return "Europe (0x" + QString::number(countrycode, 16) + ")";
+        break;
+
+    default:
+        return "Unknown (0x" + QString::number(countrycode, 16) + ")";
+        break;
+    }
+}
+
+QString Frontend::info_country()
+{
+    m64p_rom_header RomHeader;
+    if ((*CoreDoCommand)(M64CMD_ROM_GET_HEADER, sizeof(RomHeader), &RomHeader) != M64ERR_SUCCESS)
+    {
+        printf("UI-Console: couldn't get ROM header information from core library\n");
+        return "";
+    }
+    return countrycodestring(RomHeader.Country_code);
 }
 
 QString Frontend::getMogaInputCharacter(int value)
@@ -1680,7 +2314,6 @@ void Frontend::ExitEmulator()
 
 int Frontend::mapButton()
 {
-
 	int msg = 0, ret = 0;
 
 	toastButton->cancel();
@@ -1692,13 +2325,12 @@ int Frontend::mapButton()
 	toast->cancel();
 	if(ret != -1)
 	{
-		toastButton->setBody(tr("Button Pressed"));
 	}
 	else
 	{
 		toastButton->setBody(tr("Cancelling"));
+	    toastButton->show();
 	}
-	toastButton->show();
 
 	return ret;
 }
@@ -1716,12 +2348,49 @@ bool Frontend::boxartLoaded()
 
 void Frontend::loadBoxArt(const QString &url)
 {
-	m_boxartLoaded = false;
-	emit boxartLoadedChanged(m_boxartLoaded);
+    if (url.contains("nhl", Qt::CaseInsensitive) && url.contains("99") && !url.contains("breakaway", Qt::CaseInsensitive)
+            && !url.contains("blades", Qt::CaseInsensitive))
+    {
+        QString info = "<Data>\n" \
+                       "  <baseImgUrl>http://thegamesdb.net/banners/</baseImgUrl>\n" \
+                       "  <Game>\n" \
+                       "    <id>1169</id>\n" \
+                       "    <GameTitle>NHL 99</GameTitle>\n" \
+                       "    <PlatformId>3</PlatformId>\n" \
+                       "    <ReleaseDate>10/01/1998</ReleaseDate>\n" \
+                       "    <Overview>\n" \
+                       "      The most celebrated hockey game comes to the Nintendo 64. Battle along the boards, feed the " \
+                       "      open man, patrol the ice! Game Features: *Beginner lever - pick up and play!; *Coaching " \
+                       "      strategies from Stanley Cup Winner Marc Crawford; *Commentary by Bill Clement; *5 game " \
+                       "      modes; *18 top international teams; *Updated 1998 roster-expansion Nashville Predators.\n" \
+                       "    </Overview>\n" \
+                       "    <ESRB>E</ESRB>\n" \
+                       "    <Genres>\n" \
+                       "      <genre>Sports</genre>\n" \
+                       "    </Genres>\n" \
+                       "    <Players>2</Players>\n" \
+                       "    <Co-op>No</Co-op>\n" \
+                       "    <Publisher>Electronics Arts</Publisher>\n" \
+                       "    <Developer>Electronics Arts</Developer>\n" \
+                       "    <Rating>6</Rating>\n" \
+                       "    <Images>\n" \
+                       "      <boxart side=\"back\" width=\"2100\" height=\"1532\" thumb=\"boxart/thumb/original/back/1169-1.jpg\">boxart/original/back/1169-1.jpg</boxart>\n" \
+                       "      <boxart side=\"front\" width=\"2100\" height=\"1532\" thum=\"boxart/thumb/original/front/1169-1.jpg\">boxart/original/front/1169-1.jpg</boxart>\n" \
+                       "      <banner width=\"760\" height=\"140\">graphical/1169-g.jpg</banner>\n" \
+                       "    </Images>\n" \
+                       "  </Game>\n" \
+                       "</Data>";
+        onBoxArtRecieved(info, true);
+    }
+    else
+    {
+        m_boxartLoaded = false;
+        emit boxartLoadedChanged(m_boxartLoaded);
 
-	TwitterRequest* request = new TwitterRequest(this);
-	connect(request, SIGNAL(complete(QString, bool)), this, SLOT(onBoxArtRecieved(QString, bool)));
-	request->requestTimeline(url);
+        TwitterRequest* request = new TwitterRequest(this);
+        connect(request, SIGNAL(complete(QString, bool)), this, SLOT(onBoxArtRecieved(QString, bool)));
+        request->requestTimeline(url);
+    }
 }
 
 void Frontend::onBoxArtRecieved(const QString &info, bool success)
@@ -1745,39 +2414,54 @@ void Frontend::onBoxArtRecieved(const QString &info, bool success)
 	        m_boxartLoaded = true;
 	        emit boxartLoadedChanged(m_boxartLoaded);
 		}
-
-		//IF there is one game, games["game"] will be a map rather than list
-		QVariantList game = games["Game"].toList();
-
-		//TODO: Will crash with one game
-		//qDebug() << "GAME: " << game;
-
-		QVariantMap selected;
-		if(!game.isEmpty())
-			selected = game[0].toMap();
 		else
-			selected = games["Game"].toMap();
-		QVariantMap images = selected["Images"].toMap();
-		QVariantList boxart = images["boxart"].toList();
+		{
+            //IF there is one game, games["game"] will be a map rather than list
+            QVariantList game = games["Game"].toList();
 
-		url.append((boxart[1].toMap())[".data"].toString());
+            //TODO: Will crash with one game
+            //qDebug() << "GAME: " << game;
 
-		//qDebug() << "FULL URL: " << url;
+            QVariantMap selected;
+            if(!game.isEmpty())
+                selected = game[0].toMap();
+            else
+                selected = games["Game"].toMap();
+            QVariantMap images = selected["Images"].toMap();
+            QVariantList boxart = images["boxart"].toList();
 
-		//Could make obj once, and reuse
-		if(m_boxart)
-			delete m_boxart;
+            if (boxart.length() == 0)
+            {
+                m_boxartLoaded = true;
+                emit boxartLoadedChanged(m_boxartLoaded);
+            }
+            else
+            {
+                url.append((boxart[1].toMap())[".data"].toString());
 
-		m_boxart = new ImageLoader(url, mRom);
-		emit boxArtChanged(m_boxart);
+                //qDebug() << "FULL URL: " << url;
 
-		m_boxart->load();
+                //Could make obj once, and reuse
+                if(m_boxart)
+                    delete m_boxart;
 
-		m_boxartLoaded = true;
-		emit boxartLoadedChanged(m_boxartLoaded);
+                m_boxart = new ImageLoader(url, mRom);
+                emit boxArtChanged(m_boxart);
+                connect(m_boxart, SIGNAL(imageChanged()), SLOT(boxartDownloaded()));
+
+                m_boxart->load();
+            }
+		}
     }
 
-    request->deleteLater();
+    if (request)
+        request->deleteLater();
+}
+
+void Frontend::boxartDownloaded()
+{
+    m_boxartLoaded = true;
+    emit boxartLoadedChanged(m_boxartLoaded);
 }
 
 void Frontend::onVersionRecieved(const QString &info, bool success)
@@ -1938,6 +2622,11 @@ void Frontend::discoverControllers()
 	emit controllersDetected();
 }
 
+//TODO bluetooth
+void Frontend::discoverBluetoothDevices()
+{
+}
+
 void Frontend::onCreateOption(QString name, QString value, QUrl imageSource)
 {
 	for (int i = 0; i < 4; i++)
@@ -1951,6 +2640,10 @@ void Frontend::onCreateOption(QString name, QString value, QUrl imageSource)
 							.value(value)
 							.imageSource(imageSource);
 			deviceDropdown->add(opt);
+		}
+		else
+		{
+		    printf("Error getting device list dropdown\n");fflush(stdout);
 		}
 	}
 }
@@ -1996,19 +2689,54 @@ void Frontend::onInvoke(const bb::system::InvokeRequest& request)
 			file = file.mid(6);
 		emit invoked(file, false);
 	}
+	else if (QString::compare(target, "com.emulator.mupen64p.search") == 0)
+	{
+	    QString game = QString::fromUtf8(request.data());
+	    QList<Game> history = getHistory();
+	    bool found = false;
+	    foreach (Game g, history)
+	    {
+	        if (g.baseName().contains(game, Qt::CaseInsensitive))
+	        {
+	            emit invoked(g.location(), false);
+	            found = true;
+	            break;
+	        }
+	    }
+	    if (!found)
+	    {
+	        SystemToast *toast = new SystemToast;
+	        toast->setBody(tr("Could not find a ROM corresponding to the search string \"") + game + "\"");
+	        toast->show();
+	    }
+	}
 }
 
 bool Frontend::createShortcut(const QString& name, const QString& icon, const QString& location, bool run)
 {
-    if (debug_mode)
-        fprintf(stderr, "Shortcut: %s, %s, %s\n", name.toAscii().data(), icon.toAscii().data(), location.toAscii().data());
-	HomeScreen homeScreen;
-	QString temp;
-	if (run)
-		temp = "n64://";
-	else
-		temp = "m64://";
-	bool result = homeScreen.addShortcut(QUrl(icon), name, QUrl(temp + location));
+    //if (debug_mode)
+        fprintf(stderr, "Shortcut: %s, %s, %s\n", name.toAscii().data(), (icon.right(icon.length() - 7)).toAscii().data(), location.toAscii().data());
+    QFileInfo iconInfo(icon.right(icon.length() - 7));
+    bool result = false;
+    if (iconInfo.exists())
+    {
+        QImage img = QImage(icon.right(icon.length() - 7));
+        QImage newimg = img.scaled(158, 158, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        QImage newimg2(158, 158, QImage::Format_ARGB32);
+        QPainter painter(&newimg2);
+        int x, y;
+        x = (int)(((double)(158 - newimg.width())) / 2.0);
+        y = (int)(((double)(158 - newimg.height())) / 2.0);
+        painter.drawImage(x, y, newimg, 0, 0, newimg.width(), newimg.height());
+        newimg2.save("data/temp.png", "PNG");
+        HomeScreen homeScreen;
+        QString temp;
+        if (run)
+            temp = "n64://";
+        else
+            temp = "m64://";
+        result = homeScreen.addShortcut(QUrl("file:data/temp.png"), name, QUrl(temp + location));
+    }
 	if (!result)
 	{
 		SystemToast *toast = new SystemToast();
@@ -2024,4 +2752,343 @@ bool Frontend::isValidFilename(const QString &filename)
 	if (filename.length() == 0 || filename.length() > 20)
 		return false;
 	return reg.indexIn(filename) < 0;
+}
+
+void Frontend::backup()
+{
+    FilePicker* filePicker = new FilePicker();
+    filePicker->setType(FileType::Other);
+    filePicker->setTitle(tr("Backup"));
+    filePicker->setMode(FilePickerMode::Saver);
+    QStringList filter;
+    filter << "*.zip";
+    filePicker->setFilter(filter);
+
+    filePicker->open();
+
+    connect(filePicker, SIGNAL(fileSelected(const QStringList&)), SLOT(backupFileSelected(const QStringList&)));
+    connect(filePicker, SIGNAL(canceled()), SLOT(backupCanceled()));
+}
+
+#define MAXFILENAME (256)
+
+uLong filetime(const char* f, tm_zip *tmzip)
+{
+    int ret = 0;
+    struct stat s;
+    struct tm* filedate;
+    time_t tm_t = 0;
+
+    if (strcmp(f, "-") != 0)
+    {
+        char name[MAXFILENAME+1];
+        int len = strlen(f);
+        if (len > MAXFILENAME)
+            len = MAXFILENAME;
+
+        strncpy(name, f, MAXFILENAME - 1);
+        name[MAXFILENAME] = '\0';
+        if (name[len - 1] == '/')
+            name[len - 1] = '\0';
+        if (stat(name, &s) == 0)
+        {
+            tm_t = s.st_mtime;
+            ret = 1;
+        }
+    }
+    filedate = localtime(&tm_t);
+    tmzip->tm_sec = filedate->tm_sec;
+    tmzip->tm_min = filedate->tm_min;
+    tmzip->tm_hour = filedate->tm_hour;
+    tmzip->tm_mday = filedate->tm_mday;
+    tmzip->tm_mon = filedate->tm_mon;
+    tmzip->tm_year = filedate->tm_year;
+
+    return ret;
+}
+
+void change_file_date(const char* filename, tm_unz tmu_date)
+{
+    struct utimbuf ut;
+    struct tm newdate;
+    newdate.tm_sec = tmu_date.tm_sec;
+    newdate.tm_min = tmu_date.tm_min;
+    newdate.tm_hour = tmu_date.tm_hour;
+    newdate.tm_mday = tmu_date.tm_mday;
+    newdate.tm_mon = tmu_date.tm_mon;
+    if (tmu_date.tm_year > 1900)
+        newdate.tm_year = tmu_date.tm_year - 1900;
+    else
+        newdate.tm_year = tmu_date.tm_year;
+    newdate.tm_isdst = -1;
+    ut.actime = ut.modtime = mktime(&newdate);
+    utime(filename, &ut);
+}
+
+void writeFileToZip(QString filepath, zipFile zf, QString dirPrefix)
+{
+    FILE *fin;
+    zip_fileinfo zi;
+    int size_read;
+    void *buf = (void*)malloc(16384);
+    zi.tmz_date.tm_sec = zi.tmz_date.tm_min = zi.tmz_date.tm_hour =
+            zi.tmz_date.tm_mday = zi.tmz_date.tm_mon = zi.tmz_date.tm_year = 0;
+    zi.dosDate = 0;
+    zi.internal_fa = 0;
+    zi.external_fa = 0;
+    filetime(filepath.toAscii().constData(), &zi.tmz_date);
+    int err = zipOpenNewFileInZip3(zf, (dirPrefix + QFileInfo(filepath).fileName()).toAscii().constData(),
+            &zi, NULL, 0, NULL, 0, NULL, 0, Z_DEFAULT_COMPRESSION, 0, -MAX_WBITS, DEF_MEM_LEVEL, Z_DEFAULT_STRATEGY, NULL, 0);
+    fin = fopen(filepath.toAscii().constData(), "rb");
+    if (fin == NULL)
+    {
+        zipCloseFileInZip(zf);
+        printf("Error openning file %s\n", filepath.toAscii().constData());
+        return;
+    }
+
+    do
+    {
+        err = ZIP_OK;
+        size_read = (int)fread(buf, 1, 16384, fin);
+        if (size_read < 16384 && feof(fin) == 0)
+        {
+            err = ZIP_ERRNO;
+        }
+        if (size_read > 0)
+        {
+            err = zipWriteInFileInZip(zf, buf, size_read);
+            if (err < 0)
+                break;
+        }
+    }
+    while ((err == ZIP_OK) && (size_read > 0));
+
+    if (fin)
+        fclose(fin);
+    zipCloseFileInZip(zf);
+    free(buf);
+}
+
+int extract_current_file(unzFile uf)
+{
+    unz_file_info file_info;
+    char* p;
+    char* filename_withoutpath;
+    char filename_inzip[256];
+    FILE *fout=NULL;
+    int err = unzGetCurrentFileInfo(uf, &file_info, filename_inzip, sizeof(filename_inzip), NULL, 0, NULL, 0);
+
+    if (err != UNZ_OK)
+    {
+        printf("Unable to get file info for current file\n");
+        return err;
+    }
+    uInt size_buf = 16384;
+    void* buf = (void*)malloc(size_buf);
+
+    printf("Extracting %s\n", filename_inzip);
+    p = filename_withoutpath = filename_inzip;
+    while ((*p) != '\0')
+    {
+        if (((*p) == '/') || ((*p) == '\\'))
+            filename_withoutpath = p + 1;
+        p++;
+    }
+    err = unzOpenCurrentFile(uf);
+    if (err != UNZ_OK)
+    {
+        printf("Unable to open file\n");
+        return err;
+    }
+
+    QString writepath;
+    if (strstr(filename_inzip, "data/"))
+        writepath = "shared/misc/n64/data/";
+    else if (strstr(filename_inzip, "save/"))
+        writepath = "shared/misc/n64/save/";
+    else if (strcmp(filename_withoutpath, "Trolltech.conf") == 0)
+        writepath = "data/Settings/";
+    else if (strcmp(filename_withoutpath, "mupen64p.conf"))
+        writepath = "data/Settings/emulators/";
+    else
+    {
+        printf("Unknown file\n");
+        unzCloseCurrentFile(uf);
+        return UNZ_ERRNO;
+    }
+    writepath = writepath + filename_withoutpath;
+    fout = fopen(writepath.toAscii().constData(), "wb");
+
+    do
+    {
+        err = unzReadCurrentFile(uf, buf, size_buf);
+        if (err < 0)
+        {
+            printf("Error reading from file\n");
+            break;
+        }
+        if (err > 0)
+        {
+            if (fwrite(buf, err, 1, fout) != 1)
+            {
+                printf("Error writing to file\n");
+                err = UNZ_ERRNO;
+                break;
+            }
+        }
+    }
+    while (err > 0);
+
+    if (fout)
+        fclose(fout);
+    if (err == 0)
+        change_file_date(writepath.toAscii().constData(), file_info.tmu_date);
+    unzCloseCurrentFile(uf);
+    free(buf);
+    return err;
+}
+
+void Frontend::backupFileSelected(const QStringList& list)
+{
+    if (list.length() == 0)
+        return;
+    QString filename = list[0];
+    if (!filename.endsWith(".zip"))
+        filename = filename + ".zip";
+    zipFile file = zipOpen(filename.toAscii().constData(), APPEND_STATUS_CREATE);
+    SystemToast *toast = new SystemToast;
+    if (!file)
+    {
+        toast->setBody(tr("Error creating zip file"));
+        toast->show();
+        return;
+    }
+    QDir dir("shared/misc/n64/data");
+    dir.setFilter(QDir::Files);
+    foreach (QString name, dir.entryList())
+    {
+        printf("Archiving %s\n", name.toAscii().constData());
+        writeFileToZip("shared/misc/n64/data/" + name, file, "data/");
+    }
+    dir = QDir("shared/misc/n64/save");
+    dir.setFilter(QDir::Files);
+    foreach (QString name, dir.entryList())
+    {
+        printf("Archiving %s\n", name.toAscii().constData());
+        writeFileToZip("shared/misc/n64/save/" + name, file, "save/");
+    }
+    printf("Archiving Trolltech.conf\n");
+    writeFileToZip("data/Settings/Trolltech.conf", file, "app/");
+    printf("Archiving mupen64p.conf\n");
+    writeFileToZip("data/Settings/emulators/mupen64p.conf", file, "app/");
+    zipClose(file, NULL);
+    toast->setBody(tr("Backup created"));
+    toast->show();
+    fflush(stdout);
+    emit backupComplete();
+}
+
+void Frontend::backupCanceled()
+{
+    emit backupComplete();
+}
+
+void Frontend::restore()
+{
+    SystemDialog *dialog = new SystemDialog(tr("Continue"), tr("Cancel"));
+    dialog->setTitle(tr("Restore Data"));
+    dialog->setBody(tr("Restoring data will cause all current settings and saves to be lost. Are you sure you want to continue?"));
+    connect(dialog, SIGNAL(finished(bb::system::SystemUiResult::Type)), SLOT(onRestoreAccepted(bb::system::SystemUiResult::Type)));
+    dialog->show();
+}
+
+void Frontend::onRestoreAccepted(SystemUiResult::Type type)
+{
+    SystemDialog *dialog = qobject_cast<SystemDialog*>(sender());
+    if (type == SystemUiResult::ConfirmButtonSelection)
+    {
+        FilePicker* filePicker = new FilePicker();
+        filePicker->setType(FileType::Other);
+        filePicker->setTitle(tr("Restore"));
+        filePicker->setMode(FilePickerMode::Picker);
+        QStringList filter;
+        filter << "*.zip";
+        filePicker->setFilter(filter);
+
+        filePicker->open();
+
+        connect(filePicker, SIGNAL(fileSelected(const QStringList&)), SLOT(restoreFileSelected(const QStringList&)));
+        connect(filePicker, SIGNAL(canceled()), SIGNAL(restoreCanceled()));
+    }
+    else
+        emit restoreCanceled();
+    dialog->deleteLater();
+}
+
+void Frontend::restoreFileSelected(const QStringList& list)
+{
+    if (list.length() == 0)
+        return;
+    QString filename = list[0];
+    SystemToast *toast = new SystemToast;
+    if (!filename.endsWith(".zip"))
+    {
+        toast->setBody(tr("Invalid file selected"));
+        toast->show();
+        emit restoreCanceled();
+        return;
+    }
+    Q_UNUSED(list);
+    m_settings->sync();
+    m_gameSettings->sync();
+    QSettings().sync();
+
+    unzFile uf = unzOpen(filename.toAscii().constData());
+    if (uf == NULL)
+    {
+        toast->setBody(tr("Couldn't open the selected file"));
+        toast->show();
+        emit restoreCanceled();
+        return;
+    }
+
+    unz_global_info gi;
+    int err = unzGetGlobalInfo(uf, &gi);
+
+    for (uLong i = 0; i < gi.number_entry; i++)
+    {
+        if (extract_current_file(uf) != UNZ_OK)
+        {
+            toast->setBody(tr("Error extracting files"));
+            toast->show();
+            break;
+        }
+        if ((i + 1) < gi.number_entry)
+        {
+            err = unzGoToNextFile(uf);
+            if (err != UNZ_OK)
+            {
+                toast->setBody(tr("Error iterating zip file"));
+                toast->show();
+                break;
+            }
+        }
+    }
+    unzClose(uf);
+
+    if (err == UNZ_OK)
+        emit restoreComplete();
+    else
+        emit restoreCanceled();
+}
+
+void Frontend::getGameInfo()
+{
+    navigator_invoke_invocation_t *invoke;
+    navigator_invoke_invocation_create(&invoke);
+    navigator_invoke_invocation_set_action(invoke, "bb.action.OPEN");
+    navigator_invoke_invocation_set_uri(invoke, ("http://thegamesdb.net/game/" + QString::number(m_gameInfo.Id())).toAscii().constData());
+    navigator_invoke_invocation_send(invoke);
+    navigator_invoke_invocation_destroy(invoke);
 }

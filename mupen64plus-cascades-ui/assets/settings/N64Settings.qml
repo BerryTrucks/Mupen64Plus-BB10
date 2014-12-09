@@ -4,7 +4,8 @@ Container {
     property bool helpEnabled
     
     SettingsToggle {
-        title: qsTr("Frameskip")
+        id: autoFrameskip
+        title: qsTr("Auto Frameskip")
         helpText: qsTr("Increase gamespeed with lower framerate.")
         showHelp: helpEnabled
         
@@ -21,6 +22,67 @@ Container {
             _settings.N64Settings.FrameskipChanged.connect(onFrameskipChanged)
             checkedChanged.connect(onChanged)
         }
+    }
+    
+    Container {
+        leftPadding: 15.0
+        rightPadding: 15.0
+        topPadding: 20.0
+        visible: !autoFrameskip.checked
+        DropDown {
+            title: qsTr("Max Frameskip")
+            Option {
+                text: qsTr("Never skip frames")
+            }
+            Option {
+                text: qsTr("No more than 1 frame")
+            }
+            Option {
+                text: qsTr("No more than 2 frames")
+            }
+            Option {
+                text: qsTr("No more than 3 frames")
+            }
+            Option {
+                text: qsTr("No more than 4 frames")
+            }
+            Option {
+                text: qsTr("No more than 5 frames")
+            }
+            Option {
+                text: qsTr("Exactly 1 frame")
+            }
+            Option {
+                text: qsTr("Exactly 2 frames")
+            }
+            Option {
+                text: qsTr("Exactly 3 frames")
+            }
+            Option {
+                text: qsTr("Exactly 4 frames")
+            }
+            Option {
+                text: qsTr("Exactly 5 frames")
+            }
+            
+            function onMaxFrameskipChanged() {
+                selectedIndex = _settings.N64Settings.MaxFrameskip
+            }
+            
+            function onChanged(selectedIndex) {
+                _settings.N64Settings.MaxFrameskip = selectedIndex
+            }
+            
+            onCreationCompleted: {
+                onMaxFrameskipChanged()
+                _settings.N64Settings.MaxFrameskipChanged.connect(onMaxFrameskipChanged)
+                selectedIndexChanged.connect(onChanged)
+            }
+        }
+    }
+    
+    Divider {
+        visible: !autoFrameskip.checked
     }
     
     SettingsToggle {

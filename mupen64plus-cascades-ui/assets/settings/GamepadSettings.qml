@@ -11,6 +11,7 @@ Container {
             id: deviceList
             title: qsTr("Controller")
             selectedIndex: 0
+            objectName: "deviceList" + player
             
             Option {
                 text: qsTr("None")
@@ -44,6 +45,40 @@ Container {
     Divider {
     }
 
+    Container {
+        leftPadding: 15
+        rightPadding: 15
+        layout: DockLayout {
+
+        }
+        horizontalAlignment: HorizontalAlignment.Fill
+        Label {
+            text: qsTr("Use Controller Pak")
+            verticalAlignment: VerticalAlignment.Center
+        }
+        ToggleButton {
+            id: conPak
+            horizontalAlignment: HorizontalAlignment.Right
+        }
+        
+        function onControllerPakChanged() {
+            conPak.checked = _settings.PlayerGamepadSettings(player).ControllerPak
+        }
+        
+        function onChanged() {
+            _settings.PlayerGamepadSettings(player).ControllerPak = conPak.checked
+        }
+        
+        onCreationCompleted: {
+            onControllerPakChanged()
+            _settings.PlayerGamepadSettings(player).ControllerPakChanged.connect(onControllerPakChanged)
+            conPak.checkedChanged.connect(onChanged)
+        }
+    }
+    
+    Divider {
+    }
+    
     ControllerKeyBinding {
         id: dr2
         button: qsTr("D-Pad Right")

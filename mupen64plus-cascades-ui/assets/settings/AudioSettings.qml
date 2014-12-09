@@ -52,12 +52,11 @@ Page {
     
     Container {
         topPadding: 20
-        leftPadding: 20
-        rightPadding: 20
+        leftPadding: 15
+        rightPadding: 15
         
         Container {
             horizontalAlignment: HorizontalAlignment.Center
-            preferredWidth: 768
             
             layout: StackLayout {
                 orientation: LayoutOrientation.LeftToRight

@@ -19,6 +19,7 @@ void GeneralSettings::reset()
     BaseColourRed(0);
     BaseColourGreen(0);
     BaseColourBlue(0);
+    CheckVersion(true);
     emit ThemeChanged();
     emit PrimaryColourIndexChanged();
     emit PrimaryColourRedChanged();
@@ -28,6 +29,7 @@ void GeneralSettings::reset()
     emit BaseColourRedChanged();
     emit BaseColourGreenChanged();
     emit BaseColourBlueChanged();
+    emit CheckVersionChanged();
 }
 
 

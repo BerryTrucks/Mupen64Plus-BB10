@@ -26,12 +26,24 @@ public:
 signals:
     void PlayPressed();
     void PlayReleased();
+    void UpPressed();
+    void UpReleased();
+    void DownPressed();
+    void DownReleased();
+    void CapturePressed();
+
+protected slots:
+    void timeUp();
 
 public:
     virtual void event(bps_event_t* event);
+    void startEmulating();
 
 private:
-    bool m_pressed;
+    bool m_playPressed;
+    bool m_upPressed;
+    bool m_downPressed;
+    bool m_emuRunning;
 };
 
 

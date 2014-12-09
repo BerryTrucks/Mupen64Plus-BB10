@@ -19,6 +19,7 @@ class N64VideoSettings : public VideoSettings
     Q_OBJECT
 
     Q_PROPERTY(bool Frameskip READ Frameskip WRITE Frameskip NOTIFY FrameskipChanged)
+    Q_PROPERTY(int MaxFrameskip READ MaxFrameskip WRITE MaxFrameskip NOTIFY MaxFrameskipChanged)
     Q_PROPERTY(bool Fog READ Fog WRITE Fog NOTIFY FogChanged)
     Q_PROPERTY(bool SaiTextureFilter READ SaiTextureFilter WRITE SaiTextureFilter NOTIFY SaiTextureFilterChanged)
     Q_PROPERTY(bool ForceScreenClear READ ForceScreenClear WRITE ForceScreenClear NOTIFY ForceScreenClearChanged)
@@ -27,6 +28,7 @@ class N64VideoSettings : public VideoSettings
 
 signals:
     void FrameskipChanged();
+    void MaxFrameskipChanged();
     void FogChanged();
     void SaiTextureFilterChanged();
     void ForceScreenClearChanged();
@@ -36,6 +38,9 @@ signals:
 public:
     bool Frameskip() { return getBool("N64_FRAMESKIP", false); }
     void Frameskip(bool val) { setBool("N64_FRAMESKIP", val); }
+
+    int MaxFrameskip() { return getBool("N64_MAXFRAMESKIP", 0); }
+    void MaxFrameskip(int val) { setBool("N64_MAXFRAMESKIP", val); }
 
     bool Fog() { return getBool("N64_FOG", false); }
     void Fog(bool val) { setBool("N64_FOG", val); }

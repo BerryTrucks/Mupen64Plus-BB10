@@ -1,8 +1,8 @@
 import bb.cascades 1.0
 
 Container {
-    maxWidth: _frontend.Keyboard ? 310.0 : 334.0
-    maxHeight: _frontend.Keyboard ? 211.0 : 396.0
+    maxWidth: 310.0
+    maxHeight: 211.0
     background: Color.Black
     layout: DockLayout {
     }
@@ -30,9 +30,11 @@ Container {
         Label {
             horizontalAlignment: HorizontalAlignment.Center
             verticalAlignment: VerticalAlignment.Bottom
+            textStyle {
+                color: Color.White
+                fontSize: FontSize.Small
+            }
             text: _frontend.currentROM
-            textStyle.color: Color.White
-            textStyle.fontSize: FontSize.Small
             multiline: true
         }
     }

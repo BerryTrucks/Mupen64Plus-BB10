@@ -68,6 +68,8 @@ public:
     Q_INVOKABLE virtual void reset() = 0;
     virtual void writeSettings(Emulator *m64p) = 0;
 
+    static inline void sync() { settings.sync(); }
+
 protected:
     QString m_gameName;
 

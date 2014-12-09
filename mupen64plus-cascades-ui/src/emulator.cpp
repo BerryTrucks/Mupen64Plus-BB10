@@ -4,6 +4,7 @@
 #include "emulator.h"
 #include "frontend.h"
 #include <dlfcn.h>
+#include <sys/stat.h>
 
 /*#ifdef __cplusplus
 extern "C" {
@@ -330,7 +331,6 @@ int Emulator::LoadRom()
 
 int Emulator::Start()
 {
-	int rc = -1;
     current_overlay = overlay_request;
 
 	if(bbutil_init_egl(screen_cxt, g_groupId, g_windowId) != 0)
@@ -909,17 +909,28 @@ void Emulator::setSaveStateSlot(int slot)
     CoreDoCommand(M64CMD_STATE_SET_SLOT, slot, NULL);
 }
 
+int file_exist(const char *filename)
+{
+  struct stat buffer;
+  return (stat(filename, &buffer) == 0);
+}
+
 void Emulator::LoadTouchOverlay()
 {
 	current_overlay++;
-	if(current_overlay == 4)
+	if(current_overlay == 4) {
+	    if (file_exist("shared/misc/n64/data/custom.png"))
+	        current_overlay = 6;
+	    else
+	        current_overlay = 7;
+	}
+	else if (current_overlay == 8)
 	    current_overlay = 0;
 	overlay_request = current_overlay;
 }
 
 void Emulator::ExitEmulator()
 {
-
 	set_z_order(-10);
 	int vis = 0;
 	screen_set_window_property_iv(screen_win, SCREEN_PROPERTY_VISIBLE, &vis);

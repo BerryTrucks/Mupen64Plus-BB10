@@ -14,7 +14,7 @@ Container {
             horizontalAlignment: HorizontalAlignment.Fill
             
             onClicked: {
-                var sheet = compatSheet.createObject()
+                var sheet = compatSheet.createObject(_frontend)
                 sheet.open()
             }
         }
@@ -35,7 +35,11 @@ Container {
         }
     }
     
-    Divider {
+    Container {
+        topPadding: 20.0
+        bottomPadding: 5.0
+        Divider {
+        }
     }
     
     SettingsToggle {
@@ -155,12 +159,17 @@ Container {
                 fontStyle: FontStyle.Italic
             }
         }
-        
+    }
+    
+    Container {
+        topPadding: 20.0
+        bottomPadding: 5.0
         Divider {
         }
     }
     
     SettingsToggle {
+        id: displayTime
         title: qsTr("Display Time")
         helpText: qsTr("Display the current time.")
         showHelp: helpEnabled
@@ -184,6 +193,7 @@ Container {
         title: qsTr("Display Time 24hr")
         helpText: qsTr("Display the time in 24hr format.")
         showHelp: helpEnabled
+        visible: displayTime.checked
         
         function onDisplayTime24Changed() {
             checked = _settings.GlideSettings.DisplayTime24
@@ -243,7 +253,11 @@ Container {
                 fontStyle: FontStyle.Italic
             }
         }
-        
+    }
+    
+    Container {
+        topPadding: 20.0
+        bottomPadding: 5.0
         Divider {
         }
     }
@@ -297,9 +311,94 @@ Container {
                 fontStyle: FontStyle.Italic
             }
         }
-        
+    }
+    
+    Container {
+        topPadding: 20.0
+        bottomPadding: 5.0
         Divider {
         }
+    }
+    
+    SettingsToggle {
+        id: autoFrameskip
+        title: qsTr("Auto Frameskip")
+        helpText: qsTr("Increase gamespeed with lower framerate.")
+        showHelp: helpEnabled
+        
+        function onFrameskipChanged() {
+            checked = _settings.GlideSettings.AutoFrameskip
+        }
+        
+        function onChanged() {
+            _settings.GlideSettings.AutoFrameskip = checked
+        }
+        
+        onCreationCompleted: {
+            onFrameskipChanged()
+            _settings.GlideSettings.AutoFrameskipChanged.connect(onFrameskipChanged)
+            checkedChanged.connect(onChanged)
+        }
+    }
+
+    Container {
+        leftPadding: 15.0
+        rightPadding: 15.0
+        topPadding: 20.0
+        visible: !autoFrameskip.checked
+        DropDown {
+            title: qsTr("Max Frameskip")
+            Option {
+                text: qsTr("Never skip frames")
+            }
+            Option {
+                text: qsTr("No more than 1 frame")
+            }
+            Option {
+                text: qsTr("No more than 2 frames")
+            }
+            Option {
+                text: qsTr("No more than 3 frames")
+            }
+            Option {
+                text: qsTr("No more than 4 frames")
+            }
+            Option {
+                text: qsTr("No more than 5 frames")
+            }
+            Option {
+                text: qsTr("Exactly 1 frame")
+            }
+            Option {
+                text: qsTr("Exactly 2 frames")
+            }
+            Option {
+                text: qsTr("Exactly 3 frames")
+            }
+            Option {
+                text: qsTr("Exactly 4 frames")
+            }
+            Option {
+                text: qsTr("Exactly 5 frames")
+            }
+            
+            function onMaxFrameskipChanged() {
+                selectedIndex = _settings.GlideSettings.MaxFrameskip
+            }
+            
+            function onChanged(selectedIndex) {
+                _settings.GlideSettings.MaxFrameskip = selectedIndex
+            }
+            
+            onCreationCompleted: {
+                onMaxFrameskipChanged()
+                _settings.GlideSettings.MaxFrameskipChanged.connect(onMaxFrameskipChanged)
+                selectedIndexChanged.connect(onChanged)
+            }
+        }
+    }
+    
+    Divider {
     }
     
     attachedObjects: [

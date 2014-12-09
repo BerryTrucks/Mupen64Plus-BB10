@@ -2,9 +2,12 @@ APP_NAME = Mupen64Plus_cascades_ui
 
 CONFIG += qt warn_on cascades10
 
-INCLUDEPATH += ../../mupen64plus-core/src/api ../../bbutil/src ${QNX_TARGET}/usr/include/qt4/QtNetwork ${QNX_TARGET}/usr/include/qt4/QtGui ../../Unzip/src
+INCLUDEPATH += ../../../BB101Emulators/Mupen64Plus-BB10-master/mupen64plus-core-richard42/src/api
+INCLUDEPATH += ../../bbutil/src ${QNX_TARGET}/usr/include/qt4/QtNetwork
+INCLUDEPATH += ${QNX_TARGET}/usr/include/qt4/QtGui ../../Unzip/src
 
-LIBS += -L../lib -lscreen -lGLESv2 -lbbutil -lSDL12 -ltco -lpng -lz -lc -lbps -lbbcascadespickers -lbbsystem -lbbdata -lbb -lbbdevice -lUnzip -lbbplatform
+LIBS += -L../lib1.7 -lscreen -lGLESv2 -lbbutil -lSDL12 -ltco -lpng -lz -lc -lbps
+LIBS += -lbbcascadespickers -lbbsystem -lbbdata -lbb -lbbdevice -lUnzip -lbbplatform
 
 DEFINES += HAVE_BZIP2
 

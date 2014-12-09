@@ -38,34 +38,62 @@ Container {
     }
     
     Container {
-        leftPadding: 15
-        rightPadding: 15
-        layout: DockLayout {
-        }
-        
+        leftPadding: 15.0
+        rightPadding: 15.0
         horizontalAlignment: HorizontalAlignment.Fill
-        Label {
-            text: qsTr("Rumble Pak")
-            verticalAlignment: VerticalAlignment.Center
-        }
-        
-        ToggleButton {
-            id: toggle2
-            verticalAlignment: VerticalAlignment.Center
-            horizontalAlignment: HorizontalAlignment.Right
-            
-            function onRumblePakChanged() {
-                checked = _settings.PlayerTouchKeyboardSettings(player).RumblePak
+        DropDown {
+            title: qsTr("Controller Plugin")
+            Option {
+                text: qsTr("None")
+            }
+            Option {
+                text: qsTr("Controller Pak")
+            }
+            Option {
+                text: qsTr("Rumble Pak")
             }
             
-            function onChanged(checked) {
-                _settings.PlayerTouchKeyboardSettings(player).RumblePak = checked
+            function onRumblePakChanged() {
+                if (!_settings.PlayerTouchscreenSettings(player).ControllerPak) {
+                    if (_settings.PlayerTouchscreenSettings(player).RumblePak) {
+                        selectedIndex = 2
+                    }
+                    else {
+                        selectedIndex = 0
+                    }
+                }
+            }
+            
+            function onControllerPakChanged() {
+                if (_settings.PlayerTouchscreenSettings(player).ControllerPak) {
+                    selectedIndex = 1
+                }
+                else {
+                    selectedIndex = 0
+                }
+            }
+            
+            function onChanged() {
+                if (selectedIndex == 0) {
+                    _settings.PlayerTouchscreenSettings(player).ControllerPak = false
+                    _settings.PlayerTouchscreenSettings(player).RumblePak = false
+                }
+                else if (selectedIndex == 1) {
+                    _settings.PlayerTouchscreenSettings(player).ControllerPak = true
+                    _settings.PlayerTouchscreenSettings(player).RumblePak = false
+                }
+                else {
+                    _settings.PlayerTouchscreenSettings(player).ControllerPak = false
+                    _settings.PlayerTouchscreenSettings(player).RumblePak = true
+                }
             }
             
             onCreationCompleted: {
+                onControllerPakChanged()
                 onRumblePakChanged()
-                _settings.PlayerTouchKeyboardSettings(player).RumblePakChanged.connect(onRumblePakChanged)
-                checkedChanged.connect(onChanged)
+                _settings.PlayerTouchscreenSettings(player).RumblePakChanged.connect(onRumblePakChanged)
+                _settings.PlayerTouchscreenSettings(player).ControllerPakChanged.connect(onControllerPakChanged)
+                selectedIndexChanged.connect(onChanged)
             }
         }
     }

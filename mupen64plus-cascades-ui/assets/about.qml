@@ -53,7 +53,7 @@ Sheet {
                 }
                 AboutItem {
                     title: qsTr("Config API Version:")
-                    value: "2.2.0"
+                    value: "2.3.0"
                 }
                 AboutItem {
                     title: qsTr("Video Extension API Version:")
@@ -69,7 +69,7 @@ Sheet {
                 }
                 AboutItem {
                     title: qsTr("Input API Version:")
-                    value: "2.0.0"
+                    value: "2.0.1"
                 }
                 AboutItem {
                     title: qsTr("RSP API Version:")

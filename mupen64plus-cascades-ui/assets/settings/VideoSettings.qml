@@ -95,12 +95,6 @@ Page {
                             text: "GLES2n64"
                         }
                         
-                        Option {
-                            id: glide64mk2
-                            objectName: "glide64mk2"
-                            text: "GLES2glide (Broken)"
-                        }
-                        
                         function onVideoPluginChanged() {
                             selectedIndex = _settings.VideoPlugin
                         }
@@ -114,12 +108,20 @@ Page {
                             _settings.VideoPluginChanged.connect(onVideoPluginChanged)
                             selectedIndexChanged.connect(onChanged)
                         }
+                        
+                        attachedObjects: [
+                            Option {
+                                id: glide64mk2
+                                objectName: "glide64mk2"
+                                text: "GLES2glide (Broken)"
+                            }
+                        ]
                     }
                 }
                 
                 Divider { }
                 
-                RiceSettings {
+                RiceOptions {
                     id: riceSettings
                     visible: gles2rice.selected
                     helpEnabled: help.helpEnabled

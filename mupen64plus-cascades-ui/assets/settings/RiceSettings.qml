@@ -4,7 +4,7 @@ Container {
     property bool helpEnabled
     
     SettingsToggle {
-        title: qsTr("Frameskip")
+        title: qsTr("Auto Frameskip")
         showHelp: helpEnabled
         helpText: qsTr("Improve gamespeed with lower framerates.")
         
@@ -19,6 +19,26 @@ Container {
         onCreationCompleted: {
             onFrameskipChanged()
             _settings.RiceSettings.FrameskipChanged.connect(onFrameskipChanged)
+            checkedChanged.connect(onChanged)
+        }
+    }
+    
+    SettingsToggle {
+        title: qsTr("Fog")
+        showHelp: helpEnabled
+        helpText: qsTr("Show fog effects.")
+        
+        function onFogChanged() {
+            checked = _settings.RiceSettings.Fog
+        }
+        
+        function onChanged() {
+            _settings.RiceSettings.Fog = checked
+        }
+        
+        onCreationCompleted: {
+            onFogChanged()
+            _settings.RiceSettings.FogChanged.connect(onFogChanged)
             checkedChanged.connect(onChanged)
         }
     }
@@ -162,5 +182,8 @@ Container {
             multiline: true
             visible: helpEnabled
         }
+    }
+    
+    Divider {
     }
 }

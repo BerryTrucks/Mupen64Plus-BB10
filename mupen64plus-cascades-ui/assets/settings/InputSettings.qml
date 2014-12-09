@@ -73,13 +73,7 @@ Page {
                     id: titleImage
                     verticalAlignment: VerticalAlignment.Center
                     horizontalAlignment: HorizontalAlignment.Right
-                    imageSource: "asset:///images/input/kbd1.png"
-                    
-                    onCreationCompleted: {
-                        if (_frontend.isOSThree && _settings.Settings.Theme == 0) {
-                            imageSource = "asset:///images/input/kbd1_dk.png"
-                        }
-                    }
+                    imageSource: "asset:///images/input/nn1.png"
                 }
                 
                 onTouch: {
@@ -121,8 +115,20 @@ Page {
                             resetImage()
                         }
                         
+                        onCreationCompleted: {
+                            resetImage1()
+                        }
+                        
                         function resetImage1() {
-                            if (player1Settings.controllerType == -4) {
+                            if (player1Settings.controllerType == 0) {
+                                if (_frontend.isOSThree && _settings.Settings.Theme == 0) {
+                                    titleImage.imageSource = "asset:///images/input/nn1_dk.png"
+                                }
+                                else {
+                                    titleImage.imageSource = "asset:///images/input/nn1.png"
+                                }
+                            }
+                            else if (player1Settings.controllerType == -4) {
                                 if (_frontend.isOSThree && _settings.Settings.Theme == 0) {
                                     titleImage.imageSource = "asset:///images/input/gp1_dk.png"
                                 }
@@ -157,7 +163,15 @@ Page {
                         }
                         
                         function resetImage2() {
-                            if (player2Settings.controllerType == -4) {
+                            if (player2Settings.controllerType == 0) {
+                                if (_frontend.isOSThree && _settings.Settings.Theme == 0) {
+                                    titleImage.imageSource = "asset:///images/input/nn2_dk.png"
+                                }
+                                else {
+                                    titleImage.imageSource = "asset:///images/input/nn2.png"
+                                }
+                            }
+                            else if (player2Settings.controllerType == -4) {
                                 if (_frontend.isOSThree && _settings.Settings.Theme == 0) {
                                     titleImage.imageSource = "asset:///images/input/gp2_dk.png"
                                 }
@@ -192,7 +206,15 @@ Page {
                         }
                         
                         function resetImage3() {
-                            if (player3Settings.controllerType == -4) {
+                            if (player3Settings.controllerType == 0) {
+                                if (_frontend.isOSThree && _settings.Settings.Theme == 0) {
+                                    titleImage.imageSource = "asset:///images/input/nn3_dk.png"
+                                }
+                                else {
+                                    titleImage.imageSource = "asset:///images/input/nn3.png"
+                                }
+                            }
+                            else if (player3Settings.controllerType == -4) {
                                 if (_frontend.isOSThree && _settings.Settings.Theme == 0) {
                                     titleImage.imageSource = "asset:///images/input/gp3_dk.png"
                                 }
@@ -227,7 +249,15 @@ Page {
                         }
                         
                         function resetImage4() {
-                            if (player4Settings.controllerType == -4) {
+                            if (player4Settings.controllerType == 0) {
+                                if (_frontend.isOSThree && _settings.Settings.Theme == 0) {
+                                    titleImage.imageSource = "asset:///images/input/nn4_dk.png"
+                                }
+                                else {
+                                    titleImage.imageSource = "asset:///images/input/nn4.png"
+                                }
+                            }
+                            else if (player4Settings.controllerType == -4) {
                                 if (_frontend.isOSThree && _settings.Settings.Theme == 0) {
                                     titleImage.imageSource = "asset:///images/input/gp4_dk.png"
                                 }

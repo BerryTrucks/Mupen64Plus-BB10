@@ -19,6 +19,7 @@
 void InputSettings::GameNameChanged()
 {
     emit InputChanged();
+    emit ControllerPakChanged();
 }
 
 void InputSettings::writeSettings(Emulator *m64p)
@@ -29,6 +30,10 @@ void InputSettings::writeSettings(Emulator *m64p)
     {
         m64p->controller[m_player - 1].present = 1;
         m64p->controller[m_player - 1].device = Input();
+        if (ControllerPak())
+            m64p->controller[m_player - 1].plugin = 2;
+        else
+            m64p->controller[m_player - 1].plugin = 0;
     }
 }
 
@@ -195,10 +200,13 @@ void KeyboardInputSettings::writeSettings(Emulator *m64p)
     InputSettings::writeSettings(m64p);
     if (Input() != -2)
         return;
-    if (RumblePak())
-        m64p->controller[m_player - 1].plugin = 5;
-    else
-        m64p->controller[m_player - 1].plugin = 0;
+    if (!ControllerPak())
+    {
+        if (RumblePak())
+            m64p->controller[m_player - 1].plugin = 5;
+        else
+            m64p->controller[m_player - 1].plugin = 0;
+    }
     m64p->controller[m_player - 1].button[0] = DPadR();
     m64p->controller[m_player - 1].button[1] = DPadL();
     m64p->controller[m_player - 1].button[2] = DPadD();
@@ -237,6 +245,8 @@ void TouchscreenInputSettings::clear()
     emit RumblePakChanged();
     ControllerLayout(0);
     emit ControllerLayoutChanged();
+    DualAnalogGameIndex(0);
+    emit DualAnalogGameIndexChanged();
 }
 
 void TouchscreenInputSettings::reset()
@@ -246,14 +256,17 @@ void TouchscreenInputSettings::reset()
     {
         RumblePak(false);
         ControllerLayout(1);
+        DualAnalogGameIndex(0);
     }
     else
     {
         clearValInput("TOUCHSCREEN_RUMBLE");
         clearValInput("TOUCHSCREEN_LAYOUT");
+        clearValInput("TOUCHSCREEN_DUALANALOG");
     }
     emit RumblePakChanged();
     emit ControllerLayoutChanged();
+    emit DualAnalogGameIndexChanged();
 }
 
 void TouchscreenInputSettings::writeSettings(Emulator *m64p)
@@ -261,11 +274,25 @@ void TouchscreenInputSettings::writeSettings(Emulator *m64p)
     InputSettings::writeSettings(m64p);
     if (Input() != -3)
         return;
-    if (RumblePak())
-        m64p->controller[m_player - 1].plugin = 5;
+    if (!ControllerPak())
+    {
+        if (RumblePak())
+            m64p->controller[m_player - 1].plugin = 5;
+        else
+            m64p->controller[m_player - 1].plugin = 0;
+    }
+    if (ControllerLayout() < 4)
+        m64p->controller[m_player - 1].layout = ControllerLayout();
+    else if (ControllerLayout() == 5)
+    {
+        m64p->controller[m_player - 1].layout = 7;
+        if (DualAnalogGameIndex() == 0)
+            strcpy(m64p->controller[m_player - 1].gamepadId, "0");
+        else
+            strcpy(m64p->controller[m_player - 1].gamepadId, "1");
+    }
     else
-        m64p->controller[m_player - 1].plugin = 0;
-    m64p->controller[m_player - 1].layout = ControllerLayout();
+        m64p->controller[m_player - 1].layout = 6;
 }
 
 void TouchKeyboardInputSettings::GameNameChanged()
@@ -384,10 +411,13 @@ void TouchKeyboardInputSettings::writeSettings(Emulator *m64p)
     InputSettings::writeSettings(m64p);
     if (Input() != -5)
         return;
-    if (RumblePak())
-        m64p->controller[m_player - 1].plugin = 5;
-    else
-        m64p->controller[m_player - 1].plugin = 0;
+    if (!ControllerPak())
+    {
+        if (RumblePak())
+            m64p->controller[m_player - 1].plugin = 5;
+        else
+            m64p->controller[m_player - 1].plugin = 0;
+    }
     m64p->controller[m_player - 1].button[0] = DPadR();
     m64p->controller[m_player - 1].button[1] = DPadL();
     m64p->controller[m_player - 1].button[2] = DPadD();
@@ -562,7 +592,12 @@ void GamepadInputSettings::writeSettings(Emulator *m64p)
     m64p->controller[m_player - 1].button[11] = CButtonU();
     m64p->controller[m_player - 1].button[12] = RTrigger();
     m64p->controller[m_player - 1].button[13] = LTrigger();
-    m64p->controller[m_player - 1].axis[0].a = XAxisLeft();
+    if (AnalogStickType() == 1)
+        m64p->controller[m_player - 1].axis[0].a = -2;
+    else if (AnalogStickType() == 2)
+        m64p->controller[m_player - 1].axis[0].a = -3;
+    else
+        m64p->controller[m_player - 1].axis[0].a = XAxisLeft();
     m64p->controller[m_player - 1].axis[0].b = XAxisRight();
     m64p->controller[m_player - 1].axis[1].a = YAxisUp();
     m64p->controller[m_player - 1].axis[1].b = YAxisDown();

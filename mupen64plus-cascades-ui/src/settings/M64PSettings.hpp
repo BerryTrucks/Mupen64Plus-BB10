@@ -18,6 +18,7 @@
 #include "SettingsInternal/TouchKeyboardInputSettings.hpp"
 #include "SettingsInternal/TouchscreenInputSettings.hpp"
 #include "SettingsInternal/GeneralSettings.hpp"
+#include "SettingsInternal/HardwareSettings.hpp"
 
 
 class M64PSettings : public QObject
@@ -25,6 +26,7 @@ class M64PSettings : public QObject
     Q_OBJECT
 
     Q_PROPERTY(GeneralSettings* Settings READ Settings CONSTANT)
+    Q_PROPERTY(HardwareSettings* Hardware READ Hardware CONSTANT)
     Q_PROPERTY(AudioSettings* GameAudioSettings READ GameAudioSettings CONSTANT)
     Q_PROPERTY(int VideoPlugin READ VideoPlugin WRITE VideoPlugin NOTIFY VideoPluginChanged)
     Q_PROPERTY(N64VideoSettings* N64Settings READ N64Settings CONSTANT)
@@ -59,8 +61,16 @@ public:
     Q_INVOKABLE TouchKeyboardInputSettings* PlayerTouchKeyboardSettings(int player);
     Q_INVOKABLE GamepadInputSettings* PlayerGamepadSettings(int player);
 
+    enum VideoPlugin
+    {
+        RICE = 0,
+        N64 = 1,
+        GLIDE = 2
+    };
+
 public:
     GeneralSettings* Settings() { return m_general; }
+    HardwareSettings* Hardware() { return m_hardware; }
     AudioSettings* GameAudioSettings() { return m_audio; }
     int VideoPlugin() { return m_n64Video->VideoPlugin(); }
     void VideoPlugin(int val) { m_n64Video->VideoPlugin(val); }
@@ -108,10 +118,13 @@ public:
 
     void setGameName(const QString& name);
 
+    inline void sync() { SettingsBase::sync(); }
+
 private:
     static bool m_initialized;
 
     GeneralSettings *m_general;
+    HardwareSettings* m_hardware;
     AudioSettings *m_audio;
 
     //video settings

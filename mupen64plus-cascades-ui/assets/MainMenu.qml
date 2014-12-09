@@ -7,11 +7,11 @@ Page {
     property bool useNetImage: false
     property bool startNow: false
     property bool running: false
-    property variant emuSheet
+    property variant emuSheet: null
     
     function startEmulator() {
         if (_frontend.rom.length > 0) {
-            emuSheet = playSheet.createObject()
+            emuSheet = playSheet.createObject(_frontend)
             emuSheet.open()
             Application.swipeDown.connect(onSwipeDown)
             running = true
@@ -66,11 +66,12 @@ Page {
     }
 
     function loadROM(path) {
+        console.log("Load ROM from function")
         romLoading = true
         _frontend.rom = path
         picker.selectedFile = _frontend.rom.substr(_frontend.rom.lastIndexOf('/') + 1)
         
-        if(_settings.Settings.BoxartScraping){
+        if(_settings.Settings.BoxartScraping) {
             var tmp = picker.selectedFile.indexOf("(")
             if(tmp == -1){
                 _tracker.imageSource = "file:///accounts/1000/shared/misc/n64/.boxart/" + picker.selectedFile.substr(0, picker.selectedFile.lastIndexOf(".")).trim() + ".jpg";
@@ -94,6 +95,16 @@ Page {
         if (!_shortcut.loaded) {
             _shortcut.loaded = true
             menu.addAction(_shortcut, ActionBarPlacement.InOverflow)
+            menu.addAction(_rominfo, ActionBarPlacement.InOverflow)
+        }
+    }
+    
+    function gameHasId(has) {
+        if (has && !_gameInfo.isInList) {
+            addAction(_gameInfo)
+        }
+        else if (!has && _gameInfo.isInList) {
+            removeAction(_gameInfo)
         }
     }
 
@@ -114,6 +125,7 @@ Page {
         _frontend.hasHistoryChanged.connect(hasHistory)
         _frontend.invoked.connect(invoked)
         _frontend.ROMLoaded.connect(onROMLoaded)
+        _frontend.gameHasId.connect(gameHasId)
         hasHistory()
     }
     
@@ -131,7 +143,7 @@ Page {
                     verticalAlignment: VerticalAlignment.Fill
                     
                     ImageView {
-                    	imageSource: _frontend.debugMode ? (_frontend.colorIndex == 0 ? "asset:///images/titlebar.png" : "asset:///images/titlebar_dark.png") : "asset:///images/None.png"
+                        imageSource: _frontend.debugMode ? (_settings.Settings.Theme == 0 ? "asset:///images/titlebar.png" : "asset:///images/titlebar_dark.png") : "asset:///images/None.png"
                     }
                 }
                 
@@ -140,12 +152,12 @@ Page {
                     leftPadding: 15.0
                     
                     Label {
-                        text: _frontend.debugMode ? qsTr("Mupen64 Plus BB Debug") : qsTr("Mupen64 Plus BB")
+                        text: _frontend.debugMode ? qsTr("Mupen64Plus  Debug") : qsTr("Mupen64Plus ")
                         textStyle.fontSize: FontSize.Large
                         textStyle.fontWeight: FontWeight.W500
                         
                         onCreationCompleted: {
-                            if (!_frontend.isOSThree && _frontend.themeIndex == 0) {
+                            if (!_frontend.isOSThree && _settings.Settings.Theme == 0) {
                                 textStyle.color = Color.White
                             }
                         }
@@ -180,7 +192,7 @@ Page {
 	        // Top Container with a RadioButtonGroup and title
 	        Container {
 	            preferredWidth: 650
-	            topPadding: 50.0
+	            topPadding: _frontend.Keyboard ? 10.0 : 50.0
 	            horizontalAlignment: HorizontalAlignment.Center
 	            Container {
 	                preferredWidth: 650
@@ -209,7 +221,6 @@ Page {
 	                        if (_frontend.hasStartDirectory)
 	                        	picker.directories = [ _frontend.startDirectory ]
 	                        picker.open();
-	                        romLoading = true;
 	                    }
 	                }
 	            }
@@ -241,13 +252,23 @@ Page {
                     horizontalAlignment: HorizontalAlignment.Fill
                     verticalAlignment: VerticalAlignment.Fill
                     scalingMethod: ScalingMethod.AspectFit
-                    image: {
-                        if(_frontend.boxart && useNetImage && _frontend.boxartLoaded) 
-                            _frontend.boxart.image
-                        else 
-                            _tracker.image;
+                    
+                    function boxartLoaded(loaded) {
+                        if (loaded) {
+                            image = _frontend.boxart.image
+                            visible = true
+                        }
                     }
-                    visible: !romLoading
+                    
+                    onCreationCompleted: {
+                        _frontend.boxartLoadedChanged.connect(boxartLoaded)
+                        if (_settings.Settings.Theme == 0) {
+                            imageSource = "asset:///images/back_white.png"
+                        }
+                        else {
+                            imageSource = "asset:///images/back_black.png"
+                        }
+                    }
                 }
 
                 // The Label that shows a possible error message after loading has finished
@@ -295,7 +316,9 @@ Page {
                     }
                 }
 	
-	            onFileSelected: {
+                onFileSelected: {
+                    console.log("Loading ROM from file dialog")
+                    romLoading = true
 	                _frontend.rom = selectedFiles[0];
 	                selectedFile = _frontend.rom.substr(_frontend.rom.lastIndexOf('/')+1);
 	                _frontend.startDirectory = _frontend.rom.substr(0, _frontend.rom.length - selectedFile.length)
@@ -308,8 +331,13 @@ Page {
 		                    _tracker.imageSource = "file:///accounts/1000/shared/misc/n64/.boxart/" + picker.selectedFile.substr(0, tmp).trim() + ".jpg";
 		                }
 	                }
-	                else {
-	                    _tracker.imageSource = "asset:///images/mupen64plus.png"
+                    else {
+                        if (_settings.Settings.Theme == 0) {
+                            _tracker.imageSource = "asset:///images/back_white.png"
+                        }
+                        else {
+                            _tracker.imageSource = "asset:///images/back_black.png"
+                        }
 	                }
 	                _frontend.LoadRom();
 	                _frontend.createCheatsPage();
@@ -317,37 +345,25 @@ Page {
 	        },
 	        OrientationHandler {
 	              onOrientationChanged: {
-                      if(OrientationSupport.supportedDisplayOrientation == SupportedDisplayOrientation.DisplayLandscape) {
+                      if (emuSheet != null && OrientationSupport.supportedDisplayOrientation == SupportedDisplayOrientation.DisplayLandscape) {
 	                      _frontend.startEmulator(true);
 	                  }
 	              }
-	        }, 
+	        },
 	        ImageTracker {
 	            id: _tracker
-	            //imageSource: "file://" + _frontend.rom + ".png"
-	        
+
 	            onStateChanged: {
-	                /*
-	                if (state == 0x2) //Loaded state
-	                {
-	                    myImageView.image = _tracker.image;
-	                    console.log("Image Loaded: " + _tracker.imageSource);
-	                } else if (state > 0x2 ) { //Error states
-	                    myImageView.imageSource = "asset:///images/mupen64plus.png";
-	                    console.log("Image Failed: " + _tracker.imageSource);
-	                }*/
-	                if (state == 0x2) {//Loaded
-	                    //_frontend.boxart.image = _tracker.image;
+                    if (state == 0x2) {//Loaded
+	                    boxart.imageSource = _tracker.imageSource
+	                    boxart.visible = true
 	                    useNetImage = false;
 	                    romLoading = false;
 	                } else if (state == 0x3) {//Not found
-	                    //console.log("Image Not Found: " + _tracker.imageSource);
 	                    _frontend.loadBoxArt(picker.selectedFile);
 	                    useNetImage = true;
 	                    romLoading = false;
 	                } else if (state > 0x3 ) { //Error states
-	                    //myImageView.imageSource = "asset:///images/ps1_icon.png";
-	                    //console.log("Image Failed: " + _tracker.imageSource);
 	                }
 	                if (startNow) {
                         startNow = false
@@ -396,15 +412,40 @@ Page {
                     var tmp = picker.selectedFile.indexOf("(")
                     if(tmp == -1) {
                         sheet.defaultIcon = "file:///accounts/1000/shared/misc/n64/.boxart/" + picker.selectedFile.substr(0, picker.selectedFile.lastIndexOf(".")).trim() + ".jpg";
+                        sheet.clearIcon = "file:///accounts/1000/shared/misc/n64/.boxart/" + picker.selectedFile.substr(0, picker.selectedFile.lastIndexOf(".")).trim() + "_clear.png";
                     }
                     else {
                         sheet.defaultIcon = "file:///accounts/1000/shared/misc/n64/.boxart/" + picker.selectedFile.substr(0, tmp).trim() + ".jpg";
+                        sheet.clearIcon = "file:///accounts/1000/shared/misc/n64/.boxart/" + picker.selectedFile.substr(0, tmp).trim() + "_clear.png";
                     }
                 }
                 else {
                     sheet.defaultIcon = "file:///app/native/assets/images/mupen64plus.png"
                 }
                 sheet.open()
+            }
+        },
+        ActionItem {
+            id: _rominfo
+            title: qsTr("View ROM Info")
+            imageSource: "asset:///images/ic_info.png"
+            ActionBar.placement: ActionBarPlacement.InOverflow
+            
+            onTriggered: {
+                var sheet = infoSheet.createObject(_frontend)
+                sheet.open()
+            }
+        },
+        ActionItem {
+            id: _gameInfo
+            title: qsTr("Game Info")
+            ActionBar.placement: ActionBarPlacement.InOverflow
+            imageSource: "asset:///images/console.png"
+            
+            property bool isInList: false
+            
+            onTriggered: {
+                _frontend.getGameInfo()
             }
         },
         ComponentDefinition {
@@ -418,6 +459,10 @@ Page {
         ComponentDefinition {
             id: shortcutSheet
             source: "shortcut.qml"
+        },
+        ComponentDefinition {
+            id: infoSheet
+            source: "rominfo.qml"
         }
     ]
 } // Page

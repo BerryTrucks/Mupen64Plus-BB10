@@ -18,6 +18,8 @@
 #include <History/Game.hpp>
 
 #include "settings/M64PSettings.hpp"
+#include "GameInfo/GameInfo.hpp"
+#include "RiceINI.hpp"
 
 #include "emulator.h"
 #include "bbutil.h"
@@ -32,11 +34,18 @@
 #include <bb/system/InvokeRequest>
 #include <bb/system/SystemUiResult>
 
+#include <QDir>
 #include <QThread>
 #include <QSettings>
 #include <QTimer>
 #include <QPropertyAnimation>
 #include <QAtomicInt>
+#include <QPoint>
+
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
+#include <QNetworkReply>
+#include <QUrl>
 
 #include <bb/device/DisplayInfo>
 
@@ -81,7 +90,20 @@ class Frontend: public QThread
 	Q_PROPERTY(int numMenuItems READ numMenuItems NOTIFY numMenuItemsChanged)
 	Q_PROPERTY(bool noTouchScreenControllers READ noTouchScreenControllers NOTIFY touchScreenControllerCountChanged)
 	Q_PROPERTY(int SaveStateSlot READ SaveStateSlot WRITE SaveStateSlot NOTIFY SaveStateSlotChanged)
-	Q_PROPERTY(bool UseForeignWindowControl READ UseForeignWindowControl CONSTANT)
+	Q_PROPERTY(bool UseForeignWindowControl READ UseForeignWindowControl NOTIFY UseForeignWindowControlChanged)
+	Q_PROPERTY(QString ImageName READ ImageName CONSTANT)
+    Q_PROPERTY(RiceINI* RiceINI READ getRiceINI CONSTANT)
+    Q_PROPERTY(GameInfo* GameInfo READ getInfo CONSTANT)
+
+	Q_PROPERTY(QString info_goodname READ info_goodname CONSTANT)
+	Q_PROPERTY(QString info_name READ info_name CONSTANT)
+	Q_PROPERTY(QString info_md5 READ info_md5 CONSTANT)
+	Q_PROPERTY(QString info_crc READ info_crc CONSTANT)
+	Q_PROPERTY(QString info_imagetype READ info_imagetype CONSTANT)
+	Q_PROPERTY(QString info_romsize READ info_romsize CONSTANT)
+	Q_PROPERTY(QString info_version READ info_version CONSTANT)
+	Q_PROPERTY(QString info_manufacturer READ info_manufacturer CONSTANT)
+	Q_PROPERTY(QString info_country READ info_country CONSTANT)
 
 private:
     enum ThemeColor
@@ -128,6 +150,12 @@ public:
     Q_INVOKABLE
 	void removeFromHistory(QString uuid);
     Q_INVOKABLE
+    void changeHistoryName(QString uuid);
+    Q_INVOKABLE
+    void pinHistory(QString uuid);
+    Q_INVOKABLE
+    void unpinHistory(QString uuid);
+    Q_INVOKABLE
 	void clearHistory();
     Q_INVOKABLE
     void swipedown();
@@ -143,6 +171,37 @@ public:
     void pressGameshark();
     Q_INVOKABLE
     void selectState(bool save);
+    Q_INVOKABLE
+    void getGameInfo();
+    Q_INVOKABLE
+    bool fileExists(const QString& filename);
+
+    //invokables for creating custom overlays
+public:
+    Q_INVOKABLE
+    void createLayout();
+    Q_INVOKABLE
+    void placeStart(int x, int y);
+    Q_INVOKABLE
+    void placeLeft(int x, int y);
+    Q_INVOKABLE
+    void placeRight(int x, int y);
+    Q_INVOKABLE
+    void placeAnalog(int x, int y);
+    Q_INVOKABLE
+    void placeDPad(int x, int y);
+    Q_INVOKABLE
+    void placeCPad(int x, int y);
+    Q_INVOKABLE
+    void placeZ(int x, int y);
+    Q_INVOKABLE
+    void placeA(int x, int y);
+    Q_INVOKABLE
+    void placeB(int x, int y);
+    Q_INVOKABLE
+    void backup();
+    Q_INVOKABLE
+    void restore();
 
     QString getRom();
     void setRom(QString i);
@@ -168,6 +227,12 @@ signals:
 	void SaveStateSlotChanged();
 	void ROMLoaded();
 	void FocusForeignWindow();
+	void UseForeignWindowControlChanged();
+	void overlayCreationComplete();
+	void restoreComplete();
+	void backupComplete();
+    void restoreCanceled();
+    void gameHasId(bool has);
 
 public slots:
 	void addCheatToggle(int);
@@ -188,13 +253,32 @@ public slots:
 	void releaseFastforward();
 	void saveStateSlotSelected(bb::system::SystemUiResult::Type result);
 	void saveStateFileSelected(const QStringList &files);
+    void createVisual();
+    void create1024();
+    void create1280();
+    void backupFileSelected(const QStringList& list);
+    void backupCanceled();
+    void restoreFileSelected(const QStringList& list);
+    void onRestoreAccepted(bb::system::SystemUiResult::Type type);
+    void historyRenameSelected(bb::system::SystemUiResult::Type);
+    void boxartDownloaded();
+    void onIdDiscovered(const QString& info);
 	//void emitSendCheat();
 	//void handleSendCheat();
+    void onPlayReleased();
+    void onCapturePressed();
+    void saveScreenShot();
+    void swipedown_external() { swipedown(); }
 
 public:
     inline bool hasKeyboard() const { deviceinfo_details_t* details; deviceinfo_get_details(&details); bool retval = deviceinfo_details_get_keyboard(details) == DEVICEINFO_KEYBOARD_PRESENT; deviceinfo_free_details(&details); return retval; }
     inline QString compileDate() const { return QString(__DATE__).simplified(); }
     inline void focus() { emit FocusForeignWindow(); }
+#ifdef BB103
+    static inline bool isOSThree() const { return true; }
+#else
+    static bool isOSThree();
+#endif
 
 private:
     inline int width() const { bb::device::DisplayInfo info; return info.pixelSize().width(); }
@@ -225,16 +309,29 @@ private:
     inline int rotateQ10() const { return q10_rotate; }
     inline int numMenuItems() const { return m_numMenuItems; }
     inline bool noTouchScreenControllers() const { return m_noTouchScreenControllers; }
-    inline bool UseForeignWindowControl() const { return !use_gamepad; }
+    inline bool UseForeignWindowControl() const { return use_gamepad; }
+    inline QString workingDir() const { return QDir::currentPath(); }
+    inline QString ImageName() const { return "file://" + workingDir() + "/" + m_imageName; }
+    inline bool loadingGame() const { return m_loadingGame; }
+    inline RiceINI* getRiceINI() { return &m_riceini; }
+    inline GameInfo* getInfo() { return &m_gameInfo; }
 #ifdef BB103
-    inline bool isOSThree() const { return true; }
     inline bool isOSThreeCompiled() const { return true; }
     inline bb::cascades::ActionBarPlacement::Type playPlacement() const { return bb::cascades::ActionBarPlacement::Signature; }
 #else
-    inline bool isOSThree() const { return m_isOsThree; }
     inline bool isOSThreeCompiled() const { return false; }
-    inline bb::cascades::ActionBarPlacement::Type playPlacement() const { if (m_isOsThree) return (bb::cascades::ActionBarPlacement::Type)3; return bb::cascades::ActionBarPlacement::OnBar; }
+    inline bb::cascades::ActionBarPlacement::Type playPlacement() const { if (isOSThree()) return (bb::cascades::ActionBarPlacement::Type)3; return bb::cascades::ActionBarPlacement::OnBar; }
 #endif
+
+    QString info_goodname();
+    QString info_name();
+    QString info_md5();
+    QString info_crc();
+    QString info_imagetype();
+    QString info_romsize();
+    QString info_version();
+    QString info_manufacturer();
+    QString info_country();
 
     int SaveStateSlot();
     void SaveStateSlot(int slot);
@@ -250,10 +347,13 @@ private:
 	void setHistory(QList<Game> list);
 	void addToHistory(QString title);
 	bool debugMode();
+	void setupGlide();
 
 private:
     void refreshColours();
     void refreshTheme();
+
+    void discoverBluetoothDevices();
 
 private:
     bool m_emuRunning;
@@ -274,12 +374,31 @@ private:
     bb::cascades::QMapListDataModel* m_devices;
     bb::cascades::QMapListDataModel* m_history;
     QPropertyAnimation* m_menuAnimation;
-    bool m_isOsThree;
     bool m_useHdmi;
     QAtomicInt m_numMenuItems;
     bool m_noTouchScreenControllers;
     M64PSettings* m_gameSettings;
     bool m_selectStateSaving;
+    bool m_loadingGame;
+    GameInfo m_gameInfo;
+    RiceINI m_riceini;
+
+public:
+    static QQueue<QPair<int, unsigned char*> > s_screenQueue;
+    static int s_isOsThree;
+
+    //variables for creating custom overlays
+private:
+    QPoint m_start;
+    QPoint m_left;
+    QPoint m_right;
+    QPoint m_analog;
+    QPoint m_dpad;
+    QPoint m_cpad;
+    QPoint m_ztrigg;
+    QPoint m_a;
+    QPoint m_b;
+    QString m_imageName;
 };
 
 #endif // ifndef STARSHIPSETTINGSAPP_H

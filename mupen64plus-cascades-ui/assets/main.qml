@@ -26,10 +26,11 @@ TabbedPane {
         }
     }
     Tab {
-        title: qsTr("General")
+        title: qsTr("Hardware")
 	    id: generalTest
-	    GeneralSettings {
-	        id: general
+	    imageSource: "asset:///images/hardware.png"
+	    HardwareSettings {
+	        id: hardware
 	    }
     }
     Tab {
@@ -48,7 +49,7 @@ TabbedPane {
     }
     Tab {
         title: qsTr("Input")
-        imageSource: "asset:///images/input.png"
+        imageSource: "asset:///images/controller.png"
         InputSettings {}
     }
     //This tab is dynamically generated in C++
@@ -125,14 +126,33 @@ TabbedPane {
 
     Menu.definition: MenuDefinition {
         helpAction: HelpActionItem {
-                title: qsTr("About")
-                imageSource: "asset:///images/ic_info.png"
+            title: qsTr("About")
+            imageSource: "asset:///images/ic_info.png"
+             
+            onTriggered: {
+                var sheet = aboutSheet.createObject(_frontend)
+                sheet.open()
+            }
+        }
+        actions: [
+            ActionItem {
+                title: qsTr("Backup")
+                imageSource: "asset:///images/backuprestore.png"
                 
                 onTriggered: {
-                    var sheet = aboutSheet.createObject()
+                    var sheet = backrestSheet.createObject(_frontend)
                     sheet.open()
                 }
             }
+        ]
+        settingsAction: SettingsActionItem {
+            title: qsTr("Settings")
+            
+            onTriggered: {
+                var sheet = settingsSheet.createObject(_frontend)
+                sheet.open()
+            }
+        }
     }
     
     attachedObjects: [
@@ -147,6 +167,14 @@ TabbedPane {
             
             Hdmi {
             }
+        },
+        ComponentDefinition {
+            id: backrestSheet
+            source: "backrest.qml"
+        },
+        ComponentDefinition {
+            id: settingsSheet
+            source: "settings/GeneralSettings.qml"
         }
     ]
     

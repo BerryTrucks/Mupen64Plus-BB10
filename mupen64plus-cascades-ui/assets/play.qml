@@ -10,8 +10,8 @@ Sheet {
         Container {
             layout: DockLayout {
             }
-            horizontalAlignment: HorizontalAlignment.Fill
-            verticalAlignment: VerticalAlignment.Fill
+            preferredHeight: _frontend.emuHeight
+            preferredWidth: _frontend.emuWidth
             Container {
                 preferredHeight: _frontend.emuHeight
                 preferredWidth: _frontend.emuWidth
@@ -22,17 +22,23 @@ Sheet {
                     objectName: "myForeignWindow"
                     keyInputForwardingEnabled: true
                     windowId: "emulator_m64p"
-                    horizontalAlignment: HorizontalAlignment.Fill
-                    verticalAlignment: VerticalAlignment.Fill
+                    preferredHeight: _frontend.emuHeight
+                    preferredWidth: _frontend.emuWidth
                     updatedProperties: WindowProperty.Size | WindowProperty.Position | WindowProperty.Visible
                     visible: _frontend.UseForeignWindowControl
                     
                     function onFocusForeignWindow() {
-                        requestFocus()
+                        //if (_frontend.UseForeignWindowControl) {
+                        //    requestFocus()
+                        //}
                     }
                     
                     onCreationCompleted: {
-                        _frontend.FocusForeignWindow.connect(onFocusForeignWindow)
+                        //_frontend.FocusForeignWindow.connect(onFocusForeignWindow)
+                    }
+                    
+                    onBoundToWindowChanged: {
+                        //requestFocus()
                     }
                 }
             }
@@ -106,6 +112,7 @@ Sheet {
                         imageSource: "asset:///images/ic_cancel.png"
     	                textUpper: qsTr("Close")
     	                textLower: qsTr("")
+    	                visible: false
                     }
                     MupenMenuItem {
                         imageSource: "asset:///images/save_load.png"

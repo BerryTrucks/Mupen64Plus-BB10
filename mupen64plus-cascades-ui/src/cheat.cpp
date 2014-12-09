@@ -196,7 +196,7 @@ void ReadCheats(char *RomSection)
     FILE *fPtr = NULL;
     fPtr = fopen(romdbpath, "rb");
     if (fPtr == NULL)
-    {   
+    {
         printf("UI-Console: Couldn't open cheat code database file '%s'.\n", romdbpath);
         return;
     }
@@ -277,7 +277,7 @@ void ReadCheats(char *RomSection)
                 printf("UI-Console error: error getting new code (%s)\n", curline+3);
             continue;
         }
-        
+
         /* if curr_code is NULL, don't do these checks */
         if (curr_code == NULL)
             continue;
@@ -345,7 +345,7 @@ void CheatStart(eCheatMode CheatMode, char *CheatNumList)
 
     /* generate section name from ROM's CRC and country code */
     char RomSection[24];
-    sprintf(RomSection, "%X-%X-C:%X", sl(l_RomHeader.CRC1), sl(l_RomHeader.CRC2), l_RomHeader.Country_code & 0xff);
+    sprintf(RomSection, "%08X-%08X-C:%X", sl(l_RomHeader.CRC1), sl(l_RomHeader.CRC2), l_RomHeader.Country_code & 0xff);
 
     /* parse through the cheat INI file and load up any cheat codes found for this ROM */
     ReadCheats(RomSection);
@@ -435,13 +435,13 @@ void CheatStart(eCheatMode CheatMode, char *CheatNumList)
             CheatNumList = cheat_next;
         }
         CheatFreeAll();
-        
+
         return;
     }
 
     /* otherwise the mode is invalid */
     printf("UI-Console: internal error; invalid CheatMode in CheatStart()\n");
-    
+
     return;
 }
 

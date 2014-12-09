@@ -78,6 +78,7 @@ void VideoSettings::writeSettings(Emulator *m64p)
         m64p->SetConfigParameter(std::string("UI-Console[VideoPlugin]=")+"gles2n64");
     else
         m64p->SetConfigParameter(std::string("UI-Console[VideoPlugin]=")+"libmupen64plus-video-rice");
+    m64p->SetConfigParameter(std::string("Video-General[Fullscreen]=False"));
 }
 
 void RiceVideoSettings::GameNameChanged()
@@ -95,6 +96,8 @@ void RiceVideoSettings::reset()
 {
     Frameskip(false);
     emit FrameskipChanged();
+    Fog(true);
+    emit FogChanged();
     StretchVideo(true);
     emit StretchVideoChanged();
     FastTextureCRC(false);
@@ -115,6 +118,7 @@ void RiceVideoSettings::writeSettings(Emulator *m64p)
     m64p->SetConfigParameter(std::string("Video-Rice[AccurateTextureMapping]=") + std::string(AccurateTextureMapping() ? "True" : "False"));
     m64p->SetConfigParameter(std::string("Video-Rice[DoubleSizeForSmallTxtrBuf]=") + std::string(DoubleSmallTextureSize() ? "True" : "False"));
     m64p->SetConfigParameter(std::string("Video-Rice[TextureEnhancement]=") + QString::number(TextureEnhancement()).toStdString());
+    m64p->SetConfigParameter(std::string("Video-Rice[FogMethod]=") + std::string(Fog() ? "1" : "0"));
 }
 
 void N64VideoSettings::GameNameChanged()
@@ -132,6 +136,8 @@ void N64VideoSettings::reset()
 {
     Frameskip(false);
     emit FrameskipChanged();
+    MaxFrameskip(0);
+    emit MaxFrameskipChanged();
     Fog(false);
     emit FogChanged();
     SaiTextureFilter(false);
@@ -148,6 +154,8 @@ void N64VideoSettings::writeSettings(Emulator *m64p)
 {
     VideoSettings::writeSettings(m64p);
     m64p->SetConfigParameter(std::string("gles2n64[auto frameskip]=") + std::string(Frameskip() ? "True" : "False"));
+    if (!Frameskip())
+        m64p->SetConfigParameter(std::string("gles2n64[max frameskip]=") + QString::number(MaxFrameskip()).toStdString());
     m64p->SetConfigParameter(std::string("gles2n64[enable fog]=") + std::string(Fog() ? "True" : "False"));
     m64p->SetConfigParameter(std::string("gles2n64[texture 2xSAI]=") + std::string(SaiTextureFilter() ? "True" : "False"));
     m64p->SetConfigParameter(std::string("gles2n64[force screen clear]=") + std::string(ForceScreenClear() ? "True" : "False"));
@@ -178,8 +186,12 @@ void GlideVideoSettings::reset()
     emit DisplayTime24Changed();
     HiResMode(0);
     emit HiResModeChanged();
-    AspectRatio(0);
+    AspectRatio(Stretch);
     emit AspectRatioChanged();
+    AutoFrameskip(false);
+    emit AutoFrameskipChanged();
+    MaxFrameskip(0);
+    emit MaxFrameskipChanged();
 }
 
 void GlideVideoSettings::writeSettings(Emulator *m64p)
@@ -191,4 +203,6 @@ void GlideVideoSettings::writeSettings(Emulator *m64p)
     m64p->SetConfigParameter(std::string("Video-Glide64mk2[clock_24_hr]=") + std::string(DisplayTime24() ? "True" : "False"));
     m64p->SetConfigParameter(std::string("Video-Glide64mk2[fb_hires]=") + QString::number(HiResMode()).toStdString());
     m64p->SetConfigParameter(std::string("Video-Glide64mk2[aspect]=") + QString::number(AspectRatio()).toStdString());
+    m64p->SetConfigParameter(std::string("Video-Glide64mk2[autoframeskip]=") + std::string(AutoFrameskip() ? "True" : "False"));
+    m64p->SetConfigParameter(std::string("Video-Glide64mk2[maxframeskip]=") + QString::number(MaxFrameskip()).toStdString());
 }

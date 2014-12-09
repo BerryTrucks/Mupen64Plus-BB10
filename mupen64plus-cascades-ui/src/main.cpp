@@ -29,21 +29,26 @@
 
 #include <bb/system/InvokeManager>
 
+#include <bb/cascades/OrientationSupport>
+#include <bb/cascades/SupportedDisplayOrientation>
+
 #include <QFile>
 
 using ::bb::cascades::Application;
 using namespace bb::system;
 
-static BpsEventHandler *s_handler;
+BpsEventHandler *s_handler;
 bool debug_mode = false;
 bool first_on_new_settings = false;
 ActiveFrame* sceneCover;
 QSettings *m_settings;
+Frontend *mainApp;
 
 void myMessageOutput(QtMsgType type, const char* msg)
 {
     Q_UNUSED(type);
-    fprintf(stderr, "qml> %s\n", msg);
+    if (strstr(msg, "TextStyleData") == 0)
+        fprintf(stderr, "qml> %s\n", msg);
 }
 
 Q_DECL_EXPORT int main(int argc, char **argv)
@@ -89,7 +94,7 @@ Q_DECL_EXPORT int main(int argc, char **argv)
         else
             themeString = "default";
     }
-    if (settings.Settings()->PrimaryColourIndex())
+    if (settings.Settings()->PrimaryColourIndex() && Frontend::isOSThree())
     {
         themeString += "?primaryColor=0x";
         themeString += ("00" + QString::number(settings.Settings()->PrimaryColourRed() & 0xFF, 16).toUpper()).right(2);
@@ -107,6 +112,36 @@ Q_DECL_EXPORT int main(int argc, char **argv)
 	int rc;
     // Call the main application constructor.
     Application app(argc, argv);
+    bb::cascades::OrientationSupport::instance()->requestDisplayDirection(bb::cascades::DisplayDirection::North);
+    bb::cascades::OrientationSupport::instance()->setSupportedDisplayOrientation(bb::cascades::SupportedDisplayOrientation::DisplayPortrait);
+
+    // localization support
+    QTranslator translator;
+    QString locale_string = QLocale().name();
+    QString filename = QString("Mupen64Plus_cascades_ui_%1").arg(locale_string);
+    if (translator.load(filename, "app/native/qm")) {
+        app.installTranslator(&translator);
+    }
+
+    FILE* fl = 0;
+    if (debug_mode)
+    {
+    	fl = freopen("/accounts/1000/shared/misc/n64/debug.txt", "w", stderr);
+    	dup2(fileno(stderr), fileno(stdout));
+    	setvbuf(stdout, NULL, _IONBF, 0);
+        qInstallMsgHandler(myMessageOutput);
+    }
+    //qInstallMsgHandler(myMessageOutput);
+
+	mkdir("data/screens/", S_IRWXU | S_IRWXG);
+
+    InvokeManager* manager = new InvokeManager();
+    s_handler = new BpsEventHandler();
+
+    // Create the application.
+    mainApp = new Frontend;
+    QObject::connect(s_handler, SIGNAL(PlayPressed()), mainApp, SLOT(pressFastforward()));
+    QObject::connect(s_handler, SIGNAL(PlayReleased()), mainApp, SLOT(releaseFastforward()));
 
     if (first_on_new_settings || !QFile::exists("shared/misc/n64/data/gln64.conf"))
     {
@@ -129,33 +164,6 @@ Q_DECL_EXPORT int main(int argc, char **argv)
                 QFile::copy("app/native/data/gln64.conf.Z30", "shared/misc/n64/data/gln64.conf");
         }
     }
-
-    // localization support
-    QTranslator translator;
-    QString locale_string = QLocale().name();
-    QString filename = QString("Mupen64Plus_cascades_ui_%1").arg(locale_string);
-    if (translator.load(filename, "app/native/qm")) {
-        app.installTranslator(&translator);
-    }
-
-    FILE* fl = 0;
-    if (debug_mode)
-    {
-    	fl = freopen("/accounts/1000/shared/misc/n64/debug.txt", "w", stderr);
-    	dup2(fileno(stderr), fileno(stdout));
-    	setvbuf(stdout, NULL, _IONBF, 0);
-        qInstallMsgHandler(myMessageOutput);
-    }
-
-	mkdir("data/screens/", S_IRWXU | S_IRWXG);
-
-    InvokeManager* manager = new InvokeManager();
-    s_handler = new BpsEventHandler();
-
-    // Create the application.
-    Frontend *mainApp = new Frontend;
-    QObject::connect(s_handler, SIGNAL(PlayPressed()), mainApp, SLOT(pressFastforward()));
-    QObject::connect(s_handler, SIGNAL(PlayReleased()), mainApp, SLOT(releaseFastforward()));
 
     sceneCover = new ActiveFrame(mainApp);
     app.setCover(sceneCover);

@@ -30,16 +30,16 @@
 
     <!-- The name that is displayed in the BlackBerry 10 application installer.
          May have multiple values for each language. See samples or xsd schema file. Optional. -->
-    <name>Mupen64+ BB</name>
+    <name>Mupen64+ &#xf8ec;</name>
 
     <!-- A string value of the format <0-999>.<0-999>.<0-999> that represents application version which can be used to check for application upgrade.
          Values can also be 1-part or 2-part. It is not necessary to have a 3-part value.
          An updated version of application must have a versionNumber value higher than the previous version. Required. -->
-    <versionNumber>1.1.6</versionNumber>
+    <versionNumber>1.1.7</versionNumber>
 
     <!-- Fourth digit segment of the package version. First three segments are taken from the
          <versionNumber> element.  Must be an integer from 0 to 2^16-1 -->
-    <buildId>3</buildId>
+    <buildId>9</buildId>
 
     <!-- A string value (such as "v1", "2.5", or "Alpha 1") that represents the version of the application, as it should be shown to users. Optional. -->
     <!-- <versionLabel></versionLabel> -->
@@ -57,6 +57,7 @@
        <image>splash720x720.png</image>
        <image>splash768x1280.png</image>
        <image>splash720x1280.png</image>
+       <image>splash1440x1440.png</image>
     </splashScreens>
     <category>core.games</category>
     <icon>
@@ -73,10 +74,10 @@
     <configuration name="Device-Release">
        <entryPointType>Qnx/Cascades</entryPointType>
        <platformArchitecture>armle-v7</platformArchitecture>
-       <asset path="arm/o.le-v7/Mupen64Plus_cascades_ui.so" entry="true" type="Qnx/Elf">Mupen64Plus_cascades_ui.so</asset>
        <asset path="${workspace_loc:/bbutil/Device-Release/libbbutil.so}" type="Qnx/Elf">lib/libbbutil.so.1</asset>
        <asset path="${workspace_loc:/bbutil/Device-Release/libbbutil.so}" type="Qnx/Elf">lib/libbbutil.so</asset>
        <asset path="${workspace_loc:/Unzip/Device-Release/libUnzip.so}" type="Qnx/Elf">lib/libUnzip.so</asset>
+       <asset path="arm/o.le-v7/Mupen64Plus_cascades_ui.so" entry="true" type="Qnx/Elf">Mupen64Plus_cascades_ui</asset>
     </configuration>
     <configuration name="Simulator-Debug">
     	<platformArchitecture>x86</platformArchitecture>
@@ -87,13 +88,14 @@
     <!-- <authorId>ABC1234YjsnUk235h</authorId> -->
 
     <initialWindow>
-        <autoOrients>true</autoOrients>
+        <autoOrients>false</autoOrients>
+        <aspectRatio>portrait</aspectRatio>
         <systemChrome>none</systemChrome>
     </initialWindow>
     
     <invoke-target id="com.emulator.mupen64p.application">
     	<invoke-target-type>application</invoke-target-type>
-    	<invoke-target-name>Mupen64+</invoke-target-name>
+    	<invoke-target-name>Mupen64Plus</invoke-target-name>
     	<filter>
     		<action>bb.action.OPEN</action>
     		<mime-type>*</mime-type>
@@ -108,7 +110,7 @@
 
     <invoke-target id="com.emulator.mupen64p.runnow">
     	<invoke-target-type>application</invoke-target-type>
-    	<invoke-target-name>Mupen64+</invoke-target-name>
+    	<invoke-target-name>Mupen64Plus</invoke-target-name>
     	<filter>
     		<action>bb.action.OPEN</action>
     		<mime-type>*</mime-type>
@@ -122,7 +124,7 @@
 
     <invoke-target id="com.emulator.mupen64p.load">
     	<invoke-target-type>application</invoke-target-type>
-    	<invoke-target-name>Mupen64+</invoke-target-name>
+    	<invoke-target-name>Mupen64Plus</invoke-target-name>
     	<filter>
     		<action>bb.action.OPEN</action>
     		<mime-type>*</mime-type>
@@ -133,6 +135,15 @@
     		<image>Mupen64plusIcon.png</image>
     	</icon>
     </invoke-target>
+    
+    <invoke-target id="com.emulator.mupen64p.search">
+    	<invoke-target-type>application</invoke-target-type>
+    	<invoke-target-name>Mupen64Plus</invoke-target-name>
+    	<filter>
+    		<action>bb.action.SEARCH.EXTENDED</action>
+    		<mime-type>application/vnd.bb.search.criteria</mime-type>
+    	</filter>
+    </invoke-target>
 
     <asset path="assets">assets</asset>
 
@@ -141,16 +152,16 @@
         <include name="*.qm"/>
     </asset>
     <asset path="Mupen64plusIcon.png">Mupen64plusIcon.png</asset>
-    <asset path="lib/libtco.so" type="Qnx/Elf">lib/libtco.so</asset>
-    <asset path="lib/libSDL12.so" type="Qnx/Elf">lib/libSDL12.so</asset>
-    <asset path="lib/gles2n64.so" type="Qnx/Elf">lib/gles2n64.so</asset>
-    <asset path="lib/rsp-no-sound.so" type="Qnx/Elf">lib/rsp-no-sound.so</asset>
-    <asset path="lib/libmupen64plus.so.2" type="Qnx/Elf">lib/libmupen64plus.so.2</asset>
-    <asset path="lib/mupen64plus-audio-sdl.so" type="Qnx/Elf">lib/mupen64plus-audio-sdl.so</asset>
-    <asset path="lib/libmupen64plus-rsp-hle.so" type="Qnx/Elf">lib/libmupen64plus-rsp-hle.so</asset>
-    <asset path="lib/libmupen64plus-input-bb.so" type="Qnx/Elf">lib/libmupen64plus-input-bb.so</asset>
-    <asset path="lib/libmupen64plus-video-rice.so" type="Qnx/Elf">lib/libmupen64plus-video-rice.so</asset>
-    <asset path="lib/mupen64plus-video-glide64mk2.so" type="Qnx/Elf">lib/mupen64plus-video-glide64mk2.so</asset>
+    <asset path="lib1.7/libtco.so" type="Qnx/Elf">lib/libtco.so</asset>
+    <asset path="lib1.7/libSDL12.so" type="Qnx/Elf">lib/libSDL12.so</asset>
+    <asset path="lib1.7/gles2n64.so" type="Qnx/Elf">lib/gles2n64.so</asset>
+    <asset path="lib1.7/rsp-no-sound.so" type="Qnx/Elf">lib/rsp-no-sound.so</asset>
+    <asset path="lib1.7/libmupen64plus.so.2" type="Qnx/Elf">lib/libmupen64plus.so.2</asset>
+    <asset path="lib1.7/mupen64plus-audio-sdl.so" type="Qnx/Elf">lib/mupen64plus-audio-sdl.so</asset>
+    <asset path="lib1.7/libmupen64plus-rsp-hle.so" type="Qnx/Elf">lib/libmupen64plus-rsp-hle.so</asset>
+    <asset path="lib1.7/libmupen64plus-input-bb.so" type="Qnx/Elf">lib/libmupen64plus-input-bb.so</asset>
+    <asset path="lib1.7/libmupen64plus-video-rice.so" type="Qnx/Elf">lib/libmupen64plus-video-rice.so</asset>
+    <asset path="lib1.7/mupen64plus-video-glide64mk2.so" type="Qnx/Elf">lib/mupen64plus-video-glide64mk2.so</asset>
     <asset path="data/mupencheat.txt">mupencheat.txt</asset>
     <asset path="data/Glide64mk2.ini">Glide64mk2.ini</asset>
     <asset path="data/mupen64plus.cht">mupen64plus.cht</asset>
@@ -166,12 +177,14 @@
     <asset path="splash720x720.png">splash720x720.png</asset>
     <asset path="splash768x1280.png">splash768x1280.png</asset>
     <asset path="splash720x1280.png">splash720x1280.png</asset>
+    <asset path="splash1440x1440.png">splash1440x1440.png</asset>
 
     <!-- Request permission to execute native code.  Required for native applications. -->
     <permission system="true">run_native</permission>
     <permission>access_shared</permission>
     <permission>use_gamepad</permission>
 	<permission>narrow_landscape_exit</permission>
+	<permission>access_led_control</permission>
     <env var="LD_LIBRARY_PATH" value="app/native/lib:/usr/lib/qt4/lib"/>
 
 </qnx>

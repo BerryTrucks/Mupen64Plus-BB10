@@ -21,10 +21,12 @@ class TouchscreenInputSettings : public InputSettings
 
     Q_PROPERTY(bool RumblePak READ RumblePak WRITE RumblePak NOTIFY RumblePakChanged)
     Q_PROPERTY(int ControllerLayout READ ControllerLayout WRITE ControllerLayout NOTIFY ControllerLayoutChanged)
+    Q_PROPERTY(int DualAnalogGameIndex READ DualAnalogGameIndex WRITE DualAnalogGameIndex NOTIFY DualAnalogGameIndexChanged)
 
 signals:
     void RumblePakChanged();
     void ControllerLayoutChanged();
+    void DualAnalogGameIndexChanged();
 
 public:
     bool RumblePak() { return getBoolInput("TOUCHSCREEN_RUMBLE", false); }
@@ -32,6 +34,9 @@ public:
 
     int ControllerLayout() { return getIntInput("TOUCHSCREEN_LAYOUT", 1); }
     void ControllerLayout(int val) { setIntInput("TOUCHSCREEN_LAYOUT", val); }
+
+    int DualAnalogGameIndex() { return getIntInput("TOUCHSCREEN_DUALANALOG", 0); }
+    void DualAnalogGameIndex(int val) { setIntInput("TOUCHSCREEN_DUALANALOG", val); }
 
 public:
     TouchscreenInputSettings() : InputSettings(1) { }

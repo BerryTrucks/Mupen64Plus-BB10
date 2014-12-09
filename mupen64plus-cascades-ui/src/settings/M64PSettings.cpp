@@ -20,6 +20,7 @@ M64PSettings::M64PSettings()
     {
         m_initialized = true;
         qmlRegisterType<GeneralSettings>("mupen.settings", 1, 0, "GeneralSettings");
+        qmlRegisterType<HardwareSettings>("mupen.settings", 1, 0, "HardwareSettings");
         qmlRegisterType<AudioSettings>("mupen.settings", 1, 0, "AudioSettings");
         qmlRegisterType<N64VideoSettings>("mupen.settings", 1, 0, "N64VideoSettings");
         qmlRegisterType<RiceVideoSettings>("mupen.settings", 1, 0, "RiceVideoSettings");
@@ -31,6 +32,7 @@ M64PSettings::M64PSettings()
     }
 
     m_general = new GeneralSettings();
+    m_hardware = new HardwareSettings();
     m_audio = new AudioSettings();
 
     m_n64Video = new N64VideoSettings();
@@ -73,6 +75,8 @@ M64PSettings::M64PSettings()
 M64PSettings::~M64PSettings()
 {
     delete m_audio;
+    delete m_hardware;
+    delete m_general;
 
     delete m_n64Video;
     delete m_riceVideo;
@@ -106,6 +110,7 @@ void M64PSettings::setGameName(const QString &filename)
         QFileInfo fl(filename);
         QString name = fl.baseName();
         name.replace(' ', '_');
+        m_hardware->GameName(name);
         m_audio->GameName(name);
         m_n64Video->GameName(name);
         m_riceVideo->GameName(name);
@@ -133,6 +138,7 @@ void M64PSettings::onPerROMSettingsChanged()
 {
     if (!Settings()->PerROMSettings())
     {
+        m_hardware->GameName("");
         m_audio->GameName("");
         m_n64Video->GameName("");
         m_riceVideo->GameName("");

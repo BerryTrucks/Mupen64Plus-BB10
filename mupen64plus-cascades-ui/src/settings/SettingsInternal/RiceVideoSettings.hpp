@@ -19,6 +19,7 @@ class RiceVideoSettings : public VideoSettings
     Q_OBJECT
 
     Q_PROPERTY(bool Frameskip READ Frameskip WRITE Frameskip NOTIFY FrameskipChanged)
+    Q_PROPERTY(bool Fog READ Fog WRITE Fog NOTIFY FogChanged)
     Q_PROPERTY(bool StretchVideo READ StretchVideo WRITE StretchVideo NOTIFY StretchVideoChanged)
     Q_PROPERTY(bool FastTextureCRC READ FastTextureCRC WRITE FastTextureCRC NOTIFY FastTextureCRCChanged)
     Q_PROPERTY(bool AccurateTextureMapping READ AccurateTextureMapping WRITE AccurateTextureMapping NOTIFY AccurateTextureMappingChanged)
@@ -27,6 +28,7 @@ class RiceVideoSettings : public VideoSettings
 
 signals:
     void FrameskipChanged();
+    void FogChanged();
     void StretchVideoChanged();
     void FastTextureCRCChanged();
     void AccurateTextureMappingChanged();
@@ -46,6 +48,9 @@ public:
 public:
     bool Frameskip() { return getBool("RICE_FRAMESKIP", false); }
     void Frameskip(bool val) { setBool("RICE_FRAMESKIP", val); }
+
+    bool Fog() { return getBool("RICE_FOG", true); }
+    void Fog(bool val) { setBool("RICE_FOG", val); }
 
     bool StretchVideo() { return getBool("RICE_STRETCH", true); }
     void StretchVideo(bool val) { setBool("RICE_STRETCH", val); }

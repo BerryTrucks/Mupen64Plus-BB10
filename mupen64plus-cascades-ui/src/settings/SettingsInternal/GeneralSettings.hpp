@@ -32,6 +32,8 @@ class GeneralSettings : public SettingsBase
     Q_PROPERTY(int BaseColourRed READ BaseColourRed WRITE BaseColourRed NOTIFY BaseColourRedChanged)
     Q_PROPERTY(int BaseColourGreen READ BaseColourGreen WRITE BaseColourGreen NOTIFY BaseColourGreenChanged)
     Q_PROPERTY(int BaseColourBlue READ BaseColourBlue WRITE BaseColourBlue NOTIFY BaseColourBlueChanged)
+    Q_PROPERTY(bool CheckVersion READ CheckVersion WRITE CheckVersion NOTIFY CheckVersionChanged)
+    Q_PROPERTY(bool UseGridInHistory READ UseGridInHistory WRITE UseGridInHistory NOTIFY UseGridInHistoryChanged)
 
 signals:
     void DefaultToSDCardChanged();
@@ -48,6 +50,8 @@ signals:
     void BaseColourRedChanged();
     void BaseColourGreenChanged();
     void BaseColourBlueChanged();
+    void CheckVersionChanged();
+    void UseGridInHistoryChanged();
 
 public:
     bool DefaultToSDCard() { return getBaseBool("GENERAL_SDCARD", false); }
@@ -94,6 +98,12 @@ public:
 
     bool FirstRun() { return getBool("GENERAL_FIRST_RUN", true); }
     void SecondRun() { setBool("GENERAL_FIRST_RUN", false); }
+
+    bool CheckVersion() { return getBool("GENERAL_CHECK_VERSION", true); }
+    void CheckVersion(bool val) { setBool("GENERAL_CHECK_VERSION", val); }
+
+    bool UseGridInHistory() { return getBool("GENERAL_USE_GRID_HISTORY", false); }
+    void UseGridInHistory(bool val) { setBool("GENERAL_USE_GRID_HISTORY", val); }
 
 public:
     GeneralSettings() { }
