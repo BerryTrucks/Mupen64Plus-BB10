@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <errno.h>
 
 
 RiceINI::RiceINI()
@@ -140,12 +141,15 @@ void RiceINI::ReadIniFile()
 
     std::ifstream inifile;
     char readinfo[100];
-    const char *ini_filepath = (char*)"app/native/RiceVideoLinux.ini";
+    const char *ini_filepath = (char*)"shared/misc/n64/data/RiceVideoLinux.ini";
 
     inifile.open(ini_filepath);
 
     if (inifile.fail())
+    {
+        printf("Unable to load INI file\n");fflush(stdout);
         return;
+    }
 
     while (getline(inifile, readinfo))
     {
@@ -288,19 +292,19 @@ void RiceINI::ReadIniFile()
     inifile.close();
 }
 
-void RiceINI::WriteIniFile()
+int RiceINI::WriteIniFile()
 {
     if (!bIniIsChanged)
-        return;
+        return 0;
     qint32 i;
     FILE * fhIn;
     FILE * fhOut;
 
     /* get path to game-hack INI file and read it */
-    const char *ini_filepath = (char*)"app/native/RiceVideoLinux.ini";
+    const char *ini_filepath = (char*)"shared/misc/n64/data/RiceVideoLinux.ini";
     fhIn = fopen(ini_filepath, "r");
     if (fhIn == NULL)
-        return;
+        return errno;
     fseek(fhIn, 0L, SEEK_END);
     long filelen = ftell(fhIn);
     fseek(fhIn, 0L, SEEK_SET);
@@ -308,14 +312,14 @@ void RiceINI::WriteIniFile()
     if (chIniData == NULL)
     {
         fclose(fhIn);
-        return;
+        return 0;
     }
     long bytesread = fread(chIniData, 1, filelen, fhIn);
     fclose(fhIn);
     if (bytesread != filelen)
     {
         free(chIniData);
-        return;
+        return 0;
     }
     chIniData[filelen] = 0;
 
@@ -324,7 +328,8 @@ void RiceINI::WriteIniFile()
     if (fhOut == NULL)
     {
         free(chIniData);
-        return;
+        printf("Unable to open INI file for writing: %d.\n", errno);fflush(stdout);
+        return errno;
     }
 
     // Mark all sections and needing to be written
@@ -389,6 +394,7 @@ void RiceINI::WriteIniFile()
     free(chIniData);
 
     bIniIsChanged = false;
+    return 0;
 }
 
 void RiceINI::OutputSectionDetails(qint32 i, FILE* fh)

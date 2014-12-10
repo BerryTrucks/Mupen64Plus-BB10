@@ -137,6 +137,10 @@ Q_DECL_EXPORT int main(int argc, char **argv)
 
     InvokeManager* manager = new InvokeManager();
     s_handler = new BpsEventHandler();
+    if (!QFile::exists("shared/misc/n64/data/RiceVideoLinux.ini"))
+    {
+        QFile::copy("app/native/RiceVideoLinux.ini", "shared/misc/n64/data/RiceVideoLinux.ini");
+    }
 
     // Create the application.
     mainApp = new Frontend;

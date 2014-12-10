@@ -1036,8 +1036,13 @@ void Frontend::run()
         m64p->SetConfigParameter("CoreEvents[Kbd Mapping Gameshark]=103");
         m64p->SetConfigParameter("CoreEvents[Kbd Mapping Fast Forward]=102");
 
-        m_riceini.WriteIniFile();
-        //m_riceini.OutputSectionDetails(qint32 i, stdout);
+        int retval = m_riceini.WriteIniFile();
+        if (retval == 13)
+        {
+            SystemToast* toast = new SystemToast;
+            toast->setBody(tr("Unable to save advanced settings: permissions"));
+            toast->show();
+        }
         fflush(stdout);
 
         if (m_gameSettings->VideoPlugin() == M64PSettings::GLIDE)

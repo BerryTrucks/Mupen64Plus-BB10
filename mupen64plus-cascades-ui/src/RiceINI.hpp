@@ -184,7 +184,7 @@ public:
     RiceINI& operator=(const RiceINI& toCopy);
 
     void ReadIniFile();
-    void WriteIniFile();
+    int WriteIniFile();
     void setCRC(const QString& crc, const QString& name);
 
 signals:
